@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom';
 import { Navbar } from './Navbar';
 import { Footer } from './Footer';
 import { GracyAI } from './GracyAI';
+import { RoleSwitcher } from './RoleSwitcher';
 
 export const Layout: React.FC = () => {
     return (
@@ -13,6 +14,7 @@ export const Layout: React.FC = () => {
             </main>
             <Footer />
             <GracyAI />
+            <RoleSwitcher />
         </div>
     );
 };
