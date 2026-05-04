@@ -3,6 +3,8 @@ import { fallbackContent, fallbackDashboards } from '../data/nexagenContent'
 import type { ContentItem, Dashboard } from '../types/nexagen'
 
 type UnlockResponse = {
+  error?: string
+  details?: unknown
   payment_id?: string
   invoice_id?: string
   tracking_id?: string
@@ -70,6 +72,31 @@ export async function createPayment(payload: {
     body: payload,
   })
 
-  if (error) throw new Error(error.message)
+  if (error) {
+    const response = 'context' in error ? error.context : null
+    if (response instanceof Response) {
+      const body = (await response.json().catch(() => null)) as UnlockResponse | null
+      if (body?.error) throw new Error(withDetails(body.error, body.details))
+    }
+
+    const message = error.message.toLowerCase().includes('failed to send')
+      ? 'The create-payment Edge Function is not reachable. Deploy it to Supabase and set the function secrets first.'
+      : error.message
+    throw new Error(message)
+  }
+  if (data?.error) {
+    throw new Error(withDetails(data.error, data.details))
+  }
   return data ?? { message: 'Payment initiated' }
+}
+
+function withDetails(error: string, details: unknown) {
+  if (!details) return error
+  if (typeof details === 'string') return `${error}: ${details}`
+
+  try {
+    return `${error}: ${JSON.stringify(details)}`
+  } catch {
+    return error
+  }
 }

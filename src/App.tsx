@@ -5,6 +5,9 @@ import {
   ChevronDown,
   Code2,
   Compass,
+  Download,
+  Eye,
+  FileText,
   Laptop,
   LockKeyhole,
   LogOut,
@@ -35,6 +38,7 @@ const visuals = [
 ]
 
 const interests = ['Music', 'Programming', 'Operating Systems', 'PowerShell', 'Computer Basics']
+const defaultPdfPath = '/javacript.pdf'
 
 const iconFor = (title: string) => {
   if (title.includes('Music') || title.includes('Piano') || title.includes('Key')) return Music2
@@ -43,6 +47,17 @@ const iconFor = (title: string) => {
   if (title.includes('Operating') || title.includes('Installing')) return Laptop
   return BookOpen
 }
+
+const slugForDashboard = (title: string) =>
+  title
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/\(12 keys\)/g, '12 keys')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .replace('installing-and-troubleshooting', 'installing-troubleshooting')
+    .replace('find-my-key-and-pitch', 'find-my-key-pitch')
+    .replace('piano-12-keys', 'piano-12-keys')
 
 function App() {
   const [onboarded, setOnboarded] = useState(() => localStorage.getItem('nexagen:onboarded') === 'true')
@@ -314,7 +329,8 @@ function LandingShell(props: LandingShellProps) {
 
   const selectedContent = useMemo(() => {
     if (!selectedDashboard) return []
-    return content.filter((item) => item.dashboard_id === selectedDashboard.id)
+    const dashboardSlug = slugForDashboard(selectedDashboard.title)
+    return content.filter((item) => item.dashboard_id === selectedDashboard.id || item.dashboard_id === dashboardSlug)
   }, [content, selectedDashboard])
 
   const completedInSelected = selectedContent.filter((item) => completed.includes(item.id)).length
@@ -536,6 +552,7 @@ function DashboardDetail({
       </div>
 
       <div className={`mt-7 space-y-3 ${isUnlocked ? '' : 'select-none blur-[3px]'}`}>
+        <PdfResource dashboard={dashboard} isUnlocked={isUnlocked} />
         {visibleItems.map((item) => (
           <QnaItem
             appUser={appUser}
@@ -556,6 +573,53 @@ function DashboardDetail({
         </div>
       )}
     </article>
+  )
+}
+
+function PdfResource({ dashboard, isUnlocked }: { dashboard: Dashboard; isUnlocked: boolean }) {
+  const pdfName = dashboard.title.includes('Programming') ? 'JavaScript Q&A PDF' : `${dashboard.title} Q&A PDF`
+
+  return (
+    <div className="rounded-2xl border border-teal-100 bg-white p-4 shadow-sm">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-3">
+          <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-teal-50 text-teal-700">
+            <FileText className="size-5" />
+          </span>
+          <div>
+            <h3 className="font-black">{pdfName}</h3>
+            <p className="mt-1 text-sm leading-6 text-slate-500">
+              View or download the unlocked questions and answers PDF.
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <a
+            aria-disabled={!isUnlocked}
+            className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold ${
+              isUnlocked ? 'bg-slate-950 text-white' : 'pointer-events-none bg-slate-100 text-slate-400'
+            }`}
+            href={defaultPdfPath}
+            rel="noreferrer"
+            target="_blank"
+          >
+            <Eye className="size-4" />
+            View
+          </a>
+          <a
+            aria-disabled={!isUnlocked}
+            className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold ${
+              isUnlocked ? 'border border-slate-200 bg-white text-slate-800' : 'pointer-events-none bg-slate-100 text-slate-400'
+            }`}
+            download
+            href={defaultPdfPath}
+          >
+            <Download className="size-4" />
+            Download
+          </a>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -612,7 +676,10 @@ function AuthModal({ onClose }: { onClose: () => void }) {
     const { error } = mode === 'signin' ? await supabase.auth.signInWithPassword(credentials) : await supabase.auth.signUp(credentials)
     setBusy(false)
     if (error) {
-      setMessage(error.message)
+      const friendlyMessage = error.message.toLowerCase().includes('failed to fetch')
+        ? 'Could not reach Supabase. Stop the dev server, run npm run dev again, and confirm your internet connection is on.'
+        : error.message
+      setMessage(friendlyMessage)
       return
     }
     setMessage(mode === 'signup' ? 'Check email if confirmation is enabled, or continue if your project allows instant sign-in.' : 'Signed in.')

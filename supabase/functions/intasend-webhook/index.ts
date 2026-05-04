@@ -33,25 +33,31 @@ Deno.serve(async (request) => {
   }
 
   const [userId, dashboardId] = apiRef.split(':')
-  if (!userId || !dashboardId) return json({ error: 'Webhook missing api_ref metadata' }, 400)
-
   const supabase = createClient(supabaseUrl, serviceRoleKey)
+  const paymentLookup = !userId || !dashboardId
+    ? await supabase.from('payments').select('user_id,dashboard_id').eq('transaction_id', apiRef).single()
+    : { data: { user_id: userId, dashboard_id: dashboardId }, error: null }
+
+  if (paymentLookup.error || !paymentLookup.data) return json({ error: 'Webhook missing payment metadata' }, 400)
+
+  const resolvedUserId = paymentLookup.data.user_id
+  const resolvedDashboardId = paymentLookup.data.dashboard_id
 
   await supabase.from('payments').upsert(
     {
-      user_id: userId,
-      dashboard_id: dashboardId,
+      user_id: resolvedUserId,
+      dashboard_id: resolvedDashboardId,
       amount,
       status: 'COMPLETE',
-      transaction_id: transactionId,
+      transaction_id: apiRef || transactionId,
     },
     { onConflict: 'transaction_id' },
   )
 
   await supabase.from('user_unlocks').upsert(
     {
-      user_id: userId,
-      dashboard_id: dashboardId,
+      user_id: resolvedUserId,
+      dashboard_id: resolvedDashboardId,
     },
     { onConflict: 'user_id,dashboard_id' },
   )
@@ -87,4 +93,3 @@ function json(payload: unknown, status = 200) {
     status,
   })
 }
-

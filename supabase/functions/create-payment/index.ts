@@ -18,10 +18,8 @@ Deno.serve(async (request) => {
   const supabaseUrl = Deno.env.get('SUPABASE_URL')
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
   const intasendSecretKey = Deno.env.get('INTASEND_SECRET_KEY')
-  const intasendPublicKey = Deno.env.get('INTASEND_PUBLIC_KEY') ?? Deno.env.get('INTASEND_PUBLISHABLE_KEY')
-  const liveMode = (Deno.env.get('INTASEND_ENV') ?? 'LIVE').toUpperCase() === 'LIVE'
 
-  if (!supabaseUrl || !serviceRoleKey || !intasendSecretKey || !intasendPublicKey) {
+  if (!supabaseUrl || !serviceRoleKey || !intasendSecretKey) {
     return json({ error: 'Server payment environment is not configured' }, 500)
   }
 
@@ -43,46 +41,66 @@ Deno.serve(async (request) => {
     return json({ error: 'Unauthorized payment request' }, 401)
   }
 
-  const { data: dashboard, error: dashboardError } = await supabase
-    .from('dashboards')
-    .select('id,title,price,is_locked')
-    .eq('id', body.dashboard_id)
-    .single()
+  const dashboardLookup = getDashboardLookup(body.dashboard_id)
+  const dashboardQuery = supabase.from('dashboards').select('id,title,price,is_locked')
+  const { data: dashboard, error: dashboardError } = dashboardLookup.kind === 'uuid'
+    ? await dashboardQuery.eq('id', dashboardLookup.value).single()
+    : await dashboardQuery.eq('title', dashboardLookup.value).single()
 
   if (dashboardError || !dashboard) return json({ error: 'Dashboard not found' }, 404)
   if (!dashboard.is_locked || dashboard.price <= 0) return json({ error: 'Dashboard is already free' }, 400)
 
-  const apiRef = `${body.user_id}:${body.dashboard_id}:${crypto.randomUUID()}`
+  const apiRef = `nexagen-${crypto.randomUUID()}`
+  const paymentPayload = {
+    amount: String(dashboard.price),
+    api_ref: apiRef,
+    phone_number: body.phone_number,
+  }
+
+  console.log('IntaSend STK request', {
+    amount: paymentPayload.amount,
+    api_ref: paymentPayload.api_ref,
+    phone_prefix: paymentPayload.phone_number.slice(0, 4),
+  })
+
   const response = await fetch('https://api.intasend.com/api/v1/payment/mpesa-stk-push/', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${intasendSecretKey}`,
       'Content-Type': 'application/json',
-      'X-IntaSend-Public-API-Key': intasendPublicKey,
     },
-    body: JSON.stringify({
-      amount: dashboard.price,
-      api_ref: apiRef,
-      currency: 'KES',
-      email: authData.user.email ?? 'customer@nexagen.local',
-      first_name: 'NexaGen',
-      host: request.headers.get('origin') ?? 'https://nexagen.local',
-      live: liveMode,
-      method: 'MPESA_STK_PUSH',
-      narrative: `NexaGen ${dashboard.title}`,
-      phone_number: body.phone_number,
-    }),
+    body: JSON.stringify(paymentPayload),
   })
 
-  const paymentData = await response.json().catch(() => ({}))
-  if (!response.ok) return json({ error: 'IntaSend rejected the payment request', details: paymentData }, response.status)
+  const responseText = await response.text()
+  console.log('IntaSend STK response', {
+    body: responseText,
+    status: response.status,
+  })
+
+  let paymentData: Record<string, unknown> = {}
+  try {
+    paymentData = JSON.parse(responseText)
+  } catch {
+    paymentData = { raw: responseText }
+  }
+
+  if (!response.ok) {
+    return json(
+      {
+        error: `IntaSend returned ${response.status}`,
+        details: paymentData,
+      },
+      response.status,
+    )
+  }
 
   await supabase.from('payments').insert({
     user_id: body.user_id,
-    dashboard_id: body.dashboard_id,
+    dashboard_id: dashboard.id,
     amount: dashboard.price,
     status: 'PENDING',
-    transaction_id: paymentData.invoice_id ?? paymentData.id ?? apiRef,
+    transaction_id: apiRef,
   })
 
   return json({
@@ -100,3 +118,20 @@ function json(payload: unknown, status = 200) {
   })
 }
 
+function getDashboardLookup(dashboardId: string) {
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+  if (uuidPattern.test(dashboardId)) return { kind: 'uuid' as const, value: dashboardId }
+
+  const fallbackTitles: Record<string, string> = {
+    'music-theory': 'Music Theory',
+    'piano-12-keys': 'Piano (12 Keys)',
+    'find-my-key-pitch': 'Find My Key & Pitch',
+    programming: 'Programming',
+    'operating-systems': 'Operating Systems',
+    'installing-troubleshooting': 'Installing & Troubleshooting',
+    'computer-basics': 'Computer Basics',
+    'powershell-commands': 'PowerShell Commands',
+  }
+
+  return { kind: 'title' as const, value: fallbackTitles[dashboardId] ?? dashboardId }
+}

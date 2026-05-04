@@ -25,6 +25,22 @@ body {
   color: #1A1C1E;
 }
 
+button,
+a,
+[role="button"],
+summary,
+label[for],
+select,
+input[type="checkbox"],
+input[type="radio"] {
+  cursor: pointer;
+}
+
+button:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
 @layer components {
   .glass {
     @apply bg-white/70 backdrop-blur-md border border-white/20 shadow-lg;
