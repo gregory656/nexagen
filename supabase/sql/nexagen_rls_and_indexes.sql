@@ -7,8 +7,7 @@ alter table progress enable row level security;
 alter table payments enable row level security;
 
 create unique index if not exists payments_transaction_id_key
-on payments (transaction_id)
-where transaction_id is not null;
+on payments (transaction_id);
 
 create policy "Public can read dashboards"
 on dashboards
