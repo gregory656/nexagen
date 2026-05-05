@@ -8,6 +8,7 @@ import {
   Download,
   Eye,
   FileText,
+  Headphones,
   Laptop,
   LockKeyhole,
   LogOut,
@@ -17,6 +18,7 @@ import {
   Sparkles,
   Terminal,
   UnlockKeyhole,
+  Volume2,
 } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useEffect, useMemo, useState } from 'react'
@@ -26,10 +28,16 @@ import {
   getCompletedContent,
   getContentItems,
   getDashboards,
+  getSubtopics,
+  getUserLevel,
+  getUserSubtopicUnlocks,
   getUserUnlocks,
   setContentCompleted,
+  setUserLevel,
+  TEST_MODE,
+  unlockSubtopicForTest,
 } from './services/nexagenService'
-import type { AppUser, ContentItem, Dashboard, PaymentState } from './types/nexagen'
+import type { AppUser, ContentItem, Dashboard, PaymentState, SkillLevel, Subtopic } from './types/nexagen'
 
 const visuals = [
   'https://images.unsplash.com/photo-1520523839897-bd0b52f945a0?auto=format&fit=crop&w=1000&q=80',
@@ -64,10 +72,13 @@ function App() {
   const [appUser, setAppUser] = useState<AppUser>({ mode: 'guest', user: null })
   const [authOpen, setAuthOpen] = useState(false)
   const [dashboards, setDashboards] = useState<Dashboard[]>([])
+  const [subtopics, setSubtopics] = useState<Subtopic[]>([])
   const [content, setContent] = useState<ContentItem[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [unlocks, setUnlocks] = useState<string[]>([])
+  const [subtopicUnlocks, setSubtopicUnlocks] = useState<string[]>([])
   const [completed, setCompleted] = useState<string[]>([])
+  const [pianoLevel, setPianoLevelState] = useState<SkillLevel | null>(() => localStorage.getItem('nexagen:piano-level') as SkillLevel | null)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -82,9 +93,10 @@ function App() {
   }, [])
 
   useEffect(() => {
-    Promise.all([getDashboards(), getContentItems()]).then(([dashboardRows, contentRows]) => {
+    Promise.all([getDashboards(), getContentItems(), getSubtopics()]).then(([dashboardRows, contentRows, subtopicRows]) => {
       setDashboards(dashboardRows)
       setContent(contentRows)
+      setSubtopics(subtopicRows)
       setSelectedId((current) => current ?? dashboardRows[0]?.id ?? null)
     })
   }, [])
@@ -92,17 +104,23 @@ function App() {
   useEffect(() => {
     if (!appUser.user) {
       setUnlocks([])
+      setSubtopicUnlocks(TEST_MODE ? subtopics.map((subtopic) => subtopic.id) : [])
       setCompleted([])
       return
     }
 
-    Promise.all([getUserUnlocks(appUser.user.id), getCompletedContent(appUser.user.id)]).then(
-      ([unlockRows, completedRows]) => {
+    Promise.all([
+      getUserUnlocks(appUser.user.id),
+      getUserSubtopicUnlocks(appUser.user.id),
+      getCompletedContent(appUser.user.id),
+      getUserLevel(appUser.user.id),
+    ]).then(([unlockRows, subtopicUnlockRows, completedRows, level]) => {
         setUnlocks(unlockRows)
+        setSubtopicUnlocks(subtopicUnlockRows)
         setCompleted(completedRows)
-      },
-    )
-  }, [appUser.user])
+        if (level) setPianoLevelState(level)
+      })
+  }, [appUser.user, subtopics])
 
   const finishOnboarding = (mode: 'auth' | 'guest') => {
     localStorage.setItem('nexagen:onboarded', 'true')
@@ -122,6 +140,11 @@ function App() {
     setCompleted(completedRows)
   }
 
+  const savePianoLevel = async (level: SkillLevel) => {
+    setPianoLevelState(level)
+    await setUserLevel(appUser.user?.id, level)
+  }
+
   return (
     <main className="min-h-screen overflow-x-hidden bg-[#f7f9fc] text-slate-950">
       <AnimatePresence>
@@ -137,9 +160,14 @@ function App() {
         onAuthOpen={() => setAuthOpen(true)}
         onAuthClose={() => setAuthOpen(false)}
         onCompletedChange={setCompleted}
+        onPianoLevelChange={savePianoLevel}
         onRefresh={refreshUserState}
         onSelected={setSelectedId}
         selectedDashboard={selectedDashboard}
+        pianoLevel={pianoLevel}
+        subtopicUnlocks={subtopicUnlocks}
+        subtopics={subtopics}
+        onSubtopicUnlock={(id) => setSubtopicUnlocks((current) => Array.from(new Set([...current, id])))}
         unlocks={unlocks}
       />
     </main>
@@ -303,9 +331,14 @@ type LandingShellProps = {
   onAuthClose: () => void
   onAuthOpen: () => void
   onCompletedChange: (ids: string[]) => void
+  onPianoLevelChange: (level: SkillLevel) => Promise<void>
   onRefresh: () => Promise<void>
   onSelected: (id: string) => void
+  onSubtopicUnlock: (id: string) => void
+  pianoLevel: SkillLevel | null
   selectedDashboard?: Dashboard
+  subtopicUnlocks: string[]
+  subtopics: Subtopic[]
   unlocks: string[]
 }
 
@@ -319,9 +352,14 @@ function LandingShell(props: LandingShellProps) {
     onAuthClose,
     onAuthOpen,
     onCompletedChange,
+    onPianoLevelChange,
     onRefresh,
     onSelected,
+    onSubtopicUnlock,
+    pianoLevel,
     selectedDashboard,
+    subtopicUnlocks,
+    subtopics,
     unlocks,
   } = props
   const [query, setQuery] = useState('')
@@ -378,12 +416,11 @@ function LandingShell(props: LandingShellProps) {
           <div className="self-center">
             <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-teal-100 bg-white/70 px-4 py-2 text-sm font-bold text-teal-700 shadow-sm">
               <ShieldCheck className="size-4" />
-              Secure Supabase + IntaSend architecture
+              Tech, music, practice, progress
             </p>
-            <h1 className="max-w-3xl text-5xl font-black leading-[1.02] text-slate-950 md:text-7xl">NexaGen</h1>
+            <h1 className="max-w-3xl text-5xl font-black leading-[1.02] text-slate-950 md:text-7xl">Master Tech + Music in One Place</h1>
             <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-600">
-              A bright, focused dashboard for music theory, keyboard fluency, programming foundations, OS skills,
-              troubleshooting, and PowerShell learning.
+              NexaGen blends piano fluency, programming foundations, operating systems, troubleshooting, and guided Q&A into one calm learning ecosystem.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <a className="rounded-full bg-slate-950 px-6 py-3 font-bold text-white shadow-xl" href="#dashboards">
@@ -408,6 +445,9 @@ function LandingShell(props: LandingShellProps) {
           </div>
         </div>
       </section>
+
+      <ContentFeed />
+      <ValueSections />
 
       <section className="mx-auto grid max-w-7xl gap-6 px-4 py-8 lg:grid-cols-[.8fr_1.2fr]" id="dashboards">
         <div>
@@ -434,7 +474,7 @@ function LandingShell(props: LandingShellProps) {
                       <Icon className="size-5" />
                     </span>
                     <span className={`rounded-full px-3 py-1 text-xs font-black ${isUnlocked ? 'bg-teal-50 text-teal-700' : 'bg-amber-50 text-amber-700'}`}>
-                      {isUnlocked ? 'Open' : `KES ${dashboard.price}`}
+                      {isUnlocked ? 'Open' : <LockKeyhole className="size-4" />}
                     </span>
                   </div>
                   <h3 className="text-lg font-black">{dashboard.title}</h3>
@@ -452,14 +492,21 @@ function LandingShell(props: LandingShellProps) {
             dashboard={selectedDashboard}
             items={selectedContent}
             onCompletedChange={onCompletedChange}
+            onPianoLevelChange={onPianoLevelChange}
+            onSubtopicUnlock={onSubtopicUnlock}
             onUnlock={() => setUnlockTarget(selectedDashboard)}
+            pianoLevel={pianoLevel}
             progress={progress}
             query={query}
             setQuery={setQuery}
+            subtopicUnlocks={subtopicUnlocks}
+            subtopics={subtopics}
             unlocks={unlocks}
           />
         )}
       </section>
+
+      <HowItWorks />
 
       <footer className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-10 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
         <span>NexaGen uses backend-verified unlocks. Guests can learn free modules without saving progress.</span>
@@ -481,16 +528,89 @@ function LandingShell(props: LandingShellProps) {
   )
 }
 
+function ContentFeed() {
+  const blocks = [
+    ['Why Learn Piano?', 'Piano trains timing, pattern recognition, listening, and confidence. It is music plus problem-solving in a very honest machine.'],
+    ['Why Programming Matters', 'Programming teaches you how to turn ideas into working systems, automate boring work, and understand the digital tools around you.'],
+    ['How NexaGen Helps You', 'You learn in dashboards, test your level, practice with real interaction, and track progress inside small subtopics instead of giant locked walls.'],
+    ['Student Journey Logs', 'A learner can begin with one key, one chord, or one shell command, then grow into repeatable practice habits with visible progress.'],
+    ['Daily Insights', 'Small daily lessons compound. Ten focused minutes on scales or code logic beats one chaotic marathon every few weeks.'],
+  ]
+
+  return (
+    <section className="mx-auto max-w-7xl px-4 py-10">
+      <div className="mb-6 flex items-end justify-between gap-4">
+        <div>
+          <p className="text-sm font-bold uppercase tracking-[.16em] text-teal-700">Learning hub</p>
+          <h2 className="mt-2 text-3xl font-black">Daily content feed</h2>
+        </div>
+        <span className="hidden rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 shadow-sm sm:inline">Expandable reads</span>
+      </div>
+      <div className="grid gap-4 md:grid-cols-2">
+        {blocks.map(([title, copy]) => (
+          <details className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm open:shadow-xl" key={title}>
+            <summary className="flex items-center justify-between gap-4 text-left text-lg font-black">
+              {title}
+              <ChevronDown className="size-5 shrink-0" />
+            </summary>
+            <p className="mt-4 leading-7 text-slate-600">{copy}</p>
+          </details>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function ValueSections() {
+  return (
+    <section className="border-y border-slate-200 bg-white px-4 py-12">
+      <div className="mx-auto grid max-w-7xl gap-5 md:grid-cols-3">
+        {[
+          ['Why KES 100?', 'Each paid subtopic is priced like a focused mini-class: clear Q&A, practice prompts, progress, and a path to the next skill.'],
+          ['What You Gain', 'You get structured learning, real practice tools, level detection, PDF-ready content fields, and a library that can keep expanding.'],
+          ['Real Outcomes', 'Understand all 12 keys, build code confidence, solve computer basics faster, and track what you have actually completed.'],
+        ].map(([title, copy]) => (
+          <div className="rounded-2xl border border-slate-100 bg-slate-50 p-5" key={title}>
+            <h3 className="text-xl font-black">{title}</h3>
+            <p className="mt-3 leading-7 text-slate-600">{copy}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function HowItWorks() {
+  return (
+    <section className="mx-auto max-w-7xl px-4 py-12">
+      <h2 className="text-3xl font-black">How it works</h2>
+      <div className="mt-6 grid gap-3 md:grid-cols-4">
+        {['Unlock', 'Learn', 'Practice', 'Progress'].map((step, index) => (
+          <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm" key={step}>
+            <span className="grid size-10 place-items-center rounded-full bg-slate-950 text-sm font-black text-white">{index + 1}</span>
+            <h3 className="mt-4 text-lg font-black">{step}</h3>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
 function DashboardDetail({
   appUser,
   completed,
   dashboard,
   items,
   onCompletedChange,
+  onPianoLevelChange,
+  onSubtopicUnlock,
   onUnlock,
+  pianoLevel,
   progress,
   query,
   setQuery,
+  subtopicUnlocks,
+  subtopics,
   unlocks,
 }: {
   appUser: AppUser
@@ -498,13 +618,20 @@ function DashboardDetail({
   dashboard: Dashboard
   items: ContentItem[]
   onCompletedChange: (ids: string[]) => void
+  onPianoLevelChange: (level: SkillLevel) => Promise<void>
+  onSubtopicUnlock: (id: string) => void
   onUnlock: () => void
+  pianoLevel: SkillLevel | null
   progress: number
   query: string
   setQuery: (value: string) => void
+  subtopicUnlocks: string[]
+  subtopics: Subtopic[]
   unlocks: string[]
 }) {
   const isUnlocked = !dashboard.is_locked || unlocks.includes(dashboard.id)
+  const isPianoDashboard = slugForDashboard(dashboard.title) === 'piano-12-keys'
+  const dashboardSubtopics = subtopics.filter((subtopic) => subtopic.dashboard_id === dashboard.id || subtopic.dashboard_id === 'piano-12-keys')
   const visibleItems = items.filter((item) => `${item.title} ${item.body}`.toLowerCase().includes(query.toLowerCase()))
 
   const toggleCompleted = async (itemId: string) => {
@@ -512,6 +639,25 @@ function DashboardDetail({
     const nextCompleted = completed.includes(itemId) ? completed.filter((id) => id !== itemId) : [...completed, itemId]
     onCompletedChange(nextCompleted)
     await setContentCompleted(appUser.user.id, itemId, nextCompleted.includes(itemId))
+  }
+
+  if (isPianoDashboard) {
+    return (
+      <PianoDashboard
+        appUser={appUser}
+        completed={completed}
+        dashboard={dashboard}
+        items={items}
+        onCompletedChange={onCompletedChange}
+        onPianoLevelChange={onPianoLevelChange}
+        onSubtopicUnlock={onSubtopicUnlock}
+        pianoLevel={pianoLevel}
+        query={query}
+        setQuery={setQuery}
+        subtopicUnlocks={subtopicUnlocks}
+        subtopics={dashboardSubtopics}
+      />
+    )
   }
 
   return (
@@ -618,6 +764,278 @@ function PdfResource({ dashboard, isUnlocked }: { dashboard: Dashboard; isUnlock
             Download
           </a>
         </div>
+      </div>
+    </div>
+  )
+}
+
+const levelQuestions = [
+  ['Which note comes after C on white keys?', 'D', 'The white-key alphabet moves C, D, E, F, G, A, B, then repeats.'],
+  ['How many unique piano keys are in one octave?', '12', 'Seven white keys plus five black keys give the full 12-key map.'],
+  ['What is a semitone?', 'The smallest step on the piano', 'Move to the very next key, white or black. That is one semitone.'],
+  ['What notes form C major?', 'C E G', 'A major triad uses root, major third, and perfect fifth.'],
+  ['What changes a major chord into minor?', 'Flatten the third', 'C major is C E G. C minor is C Eb G. Small shift, big mood.'],
+  ['What is an inversion?', 'Same chord, different bass note', 'Inversions keep the chord notes but rearrange their order.'],
+  ['What is the I-IV-V progression in C?', 'C F G', 'Those are the first, fourth, and fifth scale-degree chords in C major.'],
+  ['What does ear training improve?', 'Recognizing notes and patterns by sound', 'Your ear starts predicting where the music wants to go.'],
+  ['What is sight reading?', 'Playing from written music', 'You turn notation into sound in real time. Calmly, ideally.'],
+  ['What does transposing mean?', 'Moving music to another key', 'Same musical idea, new starting note.'],
+]
+
+function PianoDashboard({
+  appUser,
+  completed,
+  dashboard,
+  items,
+  onCompletedChange,
+  onPianoLevelChange,
+  onSubtopicUnlock,
+  pianoLevel,
+  query,
+  setQuery,
+  subtopicUnlocks,
+  subtopics,
+}: {
+  appUser: AppUser
+  completed: string[]
+  dashboard: Dashboard
+  items: ContentItem[]
+  onCompletedChange: (ids: string[]) => void
+  onPianoLevelChange: (level: SkillLevel) => Promise<void>
+  onSubtopicUnlock: (id: string) => void
+  pianoLevel: SkillLevel | null
+  query: string
+  setQuery: (value: string) => void
+  subtopicUnlocks: string[]
+  subtopics: Subtopic[]
+}) {
+  const [answers, setAnswers] = useState<Record<number, string>>({})
+  const [selectedSubtopicId, setSelectedSubtopicId] = useState(subtopics[0]?.id ?? '')
+  const selectedSubtopic = subtopics.find((subtopic) => subtopic.id === selectedSubtopicId) ?? subtopics[0]
+  const selectedItems = items
+    .filter((item) => item.subtopic_id === selectedSubtopic?.id)
+    .filter((item) => `${item.title} ${item.body}`.toLowerCase().includes(query.toLowerCase()))
+  const selectedCompleted = selectedItems.filter((item) => completed.includes(item.id)).length
+  const subtopicProgress = selectedItems.length ? Math.round((selectedCompleted / selectedItems.length) * 100) : 0
+
+  const scoreTest = async () => {
+    const score = levelQuestions.reduce((total, [, answer], index) => {
+      return answers[index]?.trim().toLowerCase() === answer.toLowerCase() ? total + 1 : total
+    }, 0)
+    const level: SkillLevel = score <= 3 ? 'beginner' : score <= 7 ? 'intermediate' : 'pro'
+    await onPianoLevelChange(level)
+  }
+
+  const unlock = async (subtopicId: string) => {
+    const unlockedId = await unlockSubtopicForTest(appUser.user?.id, subtopicId)
+    onSubtopicUnlock(unlockedId)
+  }
+
+  const toggleCompleted = async (itemId: string) => {
+    if (!appUser.user) return
+    const nextCompleted = completed.includes(itemId) ? completed.filter((id) => id !== itemId) : [...completed, itemId]
+    onCompletedChange(nextCompleted)
+    await setContentCompleted(appUser.user.id, itemId, nextCompleted.includes(itemId))
+  }
+
+  return (
+    <article className="relative overflow-hidden rounded-[1.5rem] border border-slate-100 bg-white p-5 shadow-xl shadow-slate-200/70 md:p-7">
+      <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <p className="mb-2 text-sm font-bold uppercase tracking-[.16em] text-teal-700">Advanced piano dashboard</p>
+          <h2 className="text-3xl font-black">{dashboard.title}</h2>
+          <p className="mt-3 max-w-3xl leading-7 text-slate-600">
+            Think piano is hard? Not here. You will understand all 12 keys, play instead of only reading, and train your ear with a dashboard that lets you test every subtopic before paid unlocking goes live.
+          </p>
+        </div>
+        <div className="rounded-2xl border border-teal-100 bg-teal-50 p-4 text-sm font-bold text-teal-800">
+          {TEST_MODE ? 'TEST_MODE: every piano subtopic is available' : 'Subtopics unlock individually'}
+        </div>
+      </div>
+
+      <div className="mt-7 grid gap-4 lg:grid-cols-[1fr_.9fr]">
+        <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-xl font-black">Piano instincts test</h3>
+              <p className="mt-1 text-sm text-slate-500">10 questions detect Beginner, Intermediate, or Pro.</p>
+            </div>
+            <span className="rounded-full bg-white px-3 py-1 text-sm font-black text-slate-700">{pianoLevel ?? 'untested'}</span>
+          </div>
+          <div className="grid max-h-80 gap-3 overflow-auto pr-1">
+            {levelQuestions.map(([question, answer, explanation], index) => (
+              <details className="rounded-xl bg-white p-3" key={question}>
+                <summary className="font-bold">{index + 1}. {question}</summary>
+                <input
+                  className="mt-3 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-teal-400"
+                  onChange={(event) => setAnswers((current) => ({ ...current, [index]: event.target.value }))}
+                  placeholder="Your answer"
+                  value={answers[index] ?? ''}
+                />
+                <p className="mt-2 text-sm text-slate-500">Answer: {answer}. {explanation}</p>
+              </details>
+            ))}
+          </div>
+          <button className="mt-4 inline-flex items-center gap-2 rounded-full bg-slate-950 px-5 py-3 font-bold text-white" onClick={scoreTest}>
+            <CheckCircle2 className="size-5" />
+            Score level
+          </button>
+        </div>
+
+        <div className="rounded-2xl border border-slate-100 bg-white p-4">
+          <div className="mb-4 flex items-center gap-2">
+            <Volume2 className="size-5 text-teal-700" />
+            <h3 className="text-xl font-black">Practice piano</h3>
+          </div>
+          <PianoEngine />
+        </div>
+      </div>
+
+      <section className="mt-7 rounded-2xl border border-slate-100 bg-slate-50 p-4">
+        <h3 className="text-xl font-black">Free piano theory</h3>
+        <p className="mt-2 leading-7 text-slate-600">
+          The piano evolved from earlier keyboard instruments into acoustic grands, uprights, digital pianos, stage keyboards, and MIDI controllers. Its 12-key repeating layout makes harmony visible, which is why it remains one of the clearest tools for learning music.
+        </p>
+      </section>
+
+      <div className="mt-7 grid gap-5 lg:grid-cols-[.85fr_1.15fr]">
+        <div>
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="text-xl font-black">20 piano subtopics</h3>
+            <span className="text-sm font-bold text-slate-500">KES 100 each after test mode</span>
+          </div>
+          <div className="grid max-h-[620px] gap-3 overflow-auto pr-1">
+            {subtopics.map((subtopic) => {
+              const isUnlocked = TEST_MODE || subtopicUnlocks.includes(subtopic.id)
+              return (
+                <button
+                  className={`rounded-2xl border bg-white p-4 text-left shadow-sm ${selectedSubtopic?.id === subtopic.id ? 'border-teal-400 ring-4 ring-teal-100' : 'border-slate-100'}`}
+                  key={subtopic.id}
+                  onClick={() => setSelectedSubtopicId(subtopic.id)}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h4 className="font-black">{subtopic.title}</h4>
+                      <p className="mt-1 line-clamp-2 text-sm leading-6 text-slate-500">{subtopic.description}</p>
+                    </div>
+                    {isUnlocked ? <UnlockKeyhole className="size-5 text-teal-700" /> : <LockKeyhole className="size-5 text-amber-600" />}
+                  </div>
+                  {!isUnlocked && (
+                    <span className="mt-3 inline-flex rounded-full bg-amber-50 px-3 py-1 text-xs font-black text-amber-700" onClick={() => unlock(subtopic.id)}>
+                      Unlock inside subtopic
+                    </span>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-sm font-bold uppercase tracking-[.16em] text-teal-700">Practice mode</p>
+              <h3 className="text-2xl font-black">{selectedSubtopic?.title}</h3>
+            </div>
+            <label className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4 py-3">
+              <Search className="size-4 text-slate-500" />
+              <input className="w-full bg-transparent text-sm font-semibold outline-none md:w-52" onChange={(event) => setQuery(event.target.value)} placeholder="Search this subtopic" value={query} />
+            </label>
+          </div>
+          <div className="mt-5">
+            <div className="mb-2 flex justify-between text-sm font-bold text-slate-600">
+              <span>Completion</span>
+              <span>{appUser.user ? `${subtopicProgress}%` : 'Sign in to save'}</span>
+            </div>
+            <div className="h-3 overflow-hidden rounded-full bg-slate-100">
+              <div className="h-full rounded-full bg-teal-500 transition-all" style={{ width: `${appUser.user ? subtopicProgress : 0}%` }} />
+            </div>
+          </div>
+          <div className="mt-5 space-y-3">
+            <PdfResource dashboard={{ ...dashboard, title: selectedSubtopic?.title ?? dashboard.title }} isUnlocked />
+            {selectedItems.map((item) => (
+              <QnaItem appUser={appUser} completed={completed.includes(item.id)} item={item} key={item.id} onToggle={() => toggleCompleted(item.id)} />
+            ))}
+          </div>
+        </div>
+      </div>
+    </article>
+  )
+}
+
+const pianoNotes = [
+  { note: 'C4', label: 'C', key: 'A', freq: 261.63, black: false },
+  { note: 'C#4', label: 'C#', key: 'W', freq: 277.18, black: true, left: '8%' },
+  { note: 'D4', label: 'D', key: 'S', freq: 293.66, black: false },
+  { note: 'D#4', label: 'D#', key: 'E', freq: 311.13, black: true, left: '22%' },
+  { note: 'E4', label: 'E', key: 'D', freq: 329.63, black: false },
+  { note: 'F4', label: 'F', key: 'F', freq: 349.23, black: false },
+  { note: 'F#4', label: 'F#', key: 'T', freq: 369.99, black: true, left: '51%' },
+  { note: 'G4', label: 'G', key: 'G', freq: 392, black: false },
+  { note: 'G#4', label: 'G#', key: 'Y', freq: 415.3, black: true, left: '65%' },
+  { note: 'A4', label: 'A', key: 'H', freq: 440, black: false },
+  { note: 'A#4', label: 'A#', key: 'U', freq: 466.16, black: true, left: '79%' },
+  { note: 'B4', label: 'B', key: 'J', freq: 493.88, black: false },
+]
+
+function PianoEngine() {
+  const [activeNote, setActiveNote] = useState('C4')
+
+  const playNote = (note: (typeof pianoNotes)[number]) => {
+    setActiveNote(note.note)
+    const AudioContextClass = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+    if (!AudioContextClass) return
+    const context = new AudioContextClass()
+    const oscillator = context.createOscillator()
+    const gain = context.createGain()
+    oscillator.type = 'triangle'
+    oscillator.frequency.value = note.freq
+    gain.gain.setValueAtTime(0.0001, context.currentTime)
+    gain.gain.exponentialRampToValueAtTime(0.45, context.currentTime + 0.02)
+    gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.8)
+    oscillator.connect(gain)
+    gain.connect(context.destination)
+    oscillator.start()
+    oscillator.stop(context.currentTime + 0.82)
+  }
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const note = pianoNotes.find((item) => item.key.toLowerCase() === event.key.toLowerCase())
+      if (note) playNote(note)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
+
+  return (
+    <div>
+      <div className="mb-4 flex items-center justify-between rounded-2xl bg-slate-50 p-3">
+        <span className="inline-flex items-center gap-2 font-black"><Headphones className="size-5 text-teal-700" /> {activeNote}</span>
+        <span className="text-sm font-bold text-slate-500">Tap, click, or use A W S E D F T G Y H U J</span>
+      </div>
+      <div className="relative h-56 w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-200 p-2">
+        <div className="grid h-full grid-cols-7 gap-1">
+          {pianoNotes.filter((note) => !note.black).map((note) => (
+            <button
+              className={`flex items-end justify-center rounded-b-xl border border-slate-300 bg-white pb-4 text-sm font-black shadow-inner transition ${activeNote === note.note ? 'bg-teal-100 text-teal-800' : 'text-slate-700'}`}
+              key={note.note}
+              onClick={() => playNote(note)}
+            >
+              {note.label}
+            </button>
+          ))}
+        </div>
+        {pianoNotes.filter((note) => note.black).map((note) => (
+          <button
+            className={`absolute top-2 z-10 h-32 w-[10%] rounded-b-lg bg-slate-950 text-xs font-black text-white shadow-xl transition ${activeNote === note.note ? 'bg-teal-600' : ''}`}
+            key={note.note}
+            onClick={() => playNote(note)}
+            style={{ left: note.left }}
+          >
+            {note.label}
+          </button>
+        ))}
       </div>
     </div>
   )

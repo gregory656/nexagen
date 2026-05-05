@@ -1,4 +1,4 @@
-import type { ContentItem, Dashboard } from '../types/nexagen'
+import type { ContentItem, Dashboard, Subtopic } from '../types/nexagen'
 
 export const fallbackDashboards: Dashboard[] = [
   {
@@ -64,9 +64,74 @@ const qna = (dashboard_id: string, id: string, title: string, body: string): Con
   dashboard_id,
   title,
   body,
+  answer: body,
+  explanation: body,
   type: 'qna',
   is_locked: false,
 })
+
+const pianoSubtopicTitles = [
+  'Piano Basics',
+  'Understanding Keys',
+  'Major Scales',
+  'Minor Scales',
+  'Chords (Major)',
+  'Chords (Minor)',
+  'Chord Progressions',
+  'Ear Training',
+  'Sight Reading',
+  'Finger Techniques',
+  'Rhythm Basics',
+  'Advanced Rhythm',
+  'Improvisation',
+  'Playing by Ear',
+  'Music Theory Applied',
+  'Scales Practice',
+  'Arpeggios',
+  'Harmony',
+  'Performance Skills',
+  'Song Practice',
+]
+
+export const fallbackSubtopics: Subtopic[] = pianoSubtopicTitles.map((title, index) => ({
+  id: `piano-subtopic-${index + 1}`,
+  dashboard_id: 'piano-12-keys',
+  title,
+  description: `${title} lessons with theory checks, practical prompts, progress tracking, and piano practice mode.`,
+  price: 100,
+  is_locked: true,
+  pdf_path: null,
+}))
+
+const pianoQna = (subtopic: Subtopic): ContentItem[] => {
+  const slug = subtopic.id
+  return Array.from({ length: 20 }, (_, itemIndex) => {
+    const isTheory = itemIndex < 10
+    const number = itemIndex + 1
+    const title = isTheory
+      ? `${subtopic.title}: theory check ${number}`
+      : `${subtopic.title}: practical drill ${number - 10}`
+    const answer = isTheory
+      ? `${subtopic.title} connects to the 12-key system by naming the pattern, hearing its color, and moving it through C, Db, D, Eb, E, F, Gb, G, Ab, A, Bb, and B.`
+      : `Play the idea slowly in C, then move by half steps until all 12 keys feel familiar. Keep the hand relaxed and repeat any key that feels slippery.`
+    const explanation = isTheory
+      ? `Theory becomes useful when it predicts what your fingers and ears should expect. Tiny joke: the keyboard has many keys, but it still appreciates labels.`
+      : `Practical fluency comes from small repetitions across every key, not heroic speed. Slow work is still work, just wearing better shoes.`
+
+    return {
+      id: `${slug}-q${number}`,
+      dashboard_id: 'piano-12-keys',
+      subtopic_id: subtopic.id,
+      title,
+      body: `${answer} ${explanation}`,
+      answer,
+      explanation,
+      category: isTheory ? 'theory' : 'practical',
+      type: 'qna',
+      is_locked: false,
+    }
+  })
+}
 
 export const fallbackContent: ContentItem[] = [
   qna('music-theory', 'music-1', 'What is a key in music?', 'A key is the tonal home of a song. It tells you which note feels resolved and which scale or chord family most notes come from.'),
@@ -87,4 +152,5 @@ export const fallbackContent: ContentItem[] = [
   qna('computer-basics', 'basics-2', 'What is safe computer maintenance?', 'Update software, keep backups, avoid suspicious downloads, monitor storage, and clean dust carefully when powered off.'),
   qna('powershell-commands', 'ps-1', 'How do I list files in PowerShell?', 'Use Get-ChildItem. Add -Force to show hidden items and -Recurse to walk folders.'),
   qna('powershell-commands', 'ps-2', 'How do I inspect running processes?', 'Use Get-Process, then filter with Where-Object or sort with Sort-Object.'),
+  ...fallbackSubtopics.flatMap((subtopic) => pianoQna(subtopic)),
 ]

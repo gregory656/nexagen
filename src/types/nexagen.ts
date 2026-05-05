@@ -1,6 +1,7 @@
 import type { User } from '@supabase/supabase-js'
 
 export type ContentType = 'qna' | 'pdf'
+export type SkillLevel = 'beginner' | 'intermediate' | 'pro'
 
 export type Dashboard = {
   id: string
@@ -14,10 +15,25 @@ export type Dashboard = {
 export type ContentItem = {
   id: string
   dashboard_id: string
+  subtopic_id?: string | null
   title: string | null
   body: string | null
+  answer?: string | null
+  explanation?: string | null
+  category?: 'theory' | 'practical'
   type: ContentType
   is_locked: boolean
+  created_at?: string
+}
+
+export type Subtopic = {
+  id: string
+  dashboard_id: string
+  title: string
+  description: string | null
+  price: number
+  is_locked: boolean
+  pdf_path?: string | null
   created_at?: string
 }
 

@@ -1,6 +1,6 @@
 import { supabase } from '../lib/supabase'
-import { fallbackContent, fallbackDashboards } from '../data/nexagenContent'
-import type { ContentItem, Dashboard } from '../types/nexagen'
+import { fallbackContent, fallbackDashboards, fallbackSubtopics } from '../data/nexagenContent'
+import type { ContentItem, Dashboard, SkillLevel, Subtopic } from '../types/nexagen'
 
 type UnlockResponse = {
   error?: string
@@ -10,6 +10,8 @@ type UnlockResponse = {
   tracking_id?: string
   message?: string
 }
+
+export const TEST_MODE = true
 
 export async function getDashboards(): Promise<Dashboard[]> {
   const { data, error } = await supabase
@@ -31,6 +33,16 @@ export async function getContentItems(): Promise<ContentItem[]> {
   return data
 }
 
+export async function getSubtopics(): Promise<Subtopic[]> {
+  const { data, error } = await supabase
+    .from('subtopics')
+    .select('*')
+    .order('created_at', { ascending: true })
+
+  if (error || !data?.length) return fallbackSubtopics
+  return data
+}
+
 export async function getUserUnlocks(userId: string): Promise<string[]> {
   const { data, error } = await supabase
     .from('user_unlocks')
@@ -39,6 +51,52 @@ export async function getUserUnlocks(userId: string): Promise<string[]> {
 
   if (error) return []
   return data.map((row) => row.dashboard_id)
+}
+
+export async function getUserSubtopicUnlocks(userId: string): Promise<string[]> {
+  if (TEST_MODE) return fallbackSubtopics.map((subtopic) => subtopic.id)
+
+  const { data, error } = await supabase
+    .from('user_subtopic_unlocks')
+    .select('subtopic_id')
+    .eq('user_id', userId)
+
+  if (error) return []
+  return data.map((row) => row.subtopic_id)
+}
+
+export async function unlockSubtopicForTest(userId: string | undefined, subtopicId: string): Promise<string> {
+  if (TEST_MODE) return subtopicId
+  if (!userId) throw new Error('Sign in before unlocking subtopics.')
+
+  const { error } = await supabase.from('user_subtopic_unlocks').upsert(
+    {
+      user_id: userId,
+      subtopic_id: subtopicId,
+    },
+    { onConflict: 'user_id,subtopic_id' },
+  )
+  if (error) throw error
+  return subtopicId
+}
+
+export async function getUserLevel(userId: string): Promise<SkillLevel | null> {
+  const { data, error } = await supabase.from('user_levels').select('level').eq('user_id', userId).maybeSingle()
+  if (error) return null
+  return data?.level ?? null
+}
+
+export async function setUserLevel(userId: string | undefined, level: SkillLevel): Promise<void> {
+  localStorage.setItem('nexagen:piano-level', level)
+  if (!userId) return
+
+  await supabase.from('user_levels').upsert(
+    {
+      user_id: userId,
+      level,
+    },
+    { onConflict: 'user_id' },
+  )
 }
 
 export async function getCompletedContent(userId: string): Promise<string[]> {
