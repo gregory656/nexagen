@@ -16,6 +16,7 @@ import {
   LockKeyhole,
   LogOut,
   Medal,
+  Menu,
   MessageCircle,
   Music2,
   Pause,
@@ -26,7 +27,6 @@ import {
   Terminal,
   Trophy,
   UnlockKeyhole,
-  UserCircle,
   Volume2,
   X,
 } from 'lucide-react'
@@ -613,11 +613,11 @@ function LandingShell(props: LandingShellProps) {
           </button>
           <div className="flex items-center gap-3">
             <button
-              aria-label="Open profile"
+              aria-label="Open menu"
               className="grid size-11 place-items-center rounded-full border border-slate-200 bg-white text-slate-800 shadow-sm"
               onClick={() => setSidebarOpen(true)}
             >
-              <UserCircle className="size-5" />
+              <Menu className="size-5" />
             </button>
             {appUser.user ? (
               <>
@@ -795,9 +795,67 @@ function LandingShell(props: LandingShellProps) {
         unlocks={unlocks}
       />
 
-      <footer className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-10 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-        <span>NexaGen uses backend-verified unlocks. Guests can learn free modules without saving progress.</span>
-        <span className="rounded-full border border-slate-200 bg-white px-4 py-2 font-bold text-slate-700 shadow-sm">Payments by IntaSend</span>
+      <footer className="mx-auto max-w-7xl px-4 py-12 text-slate-800">
+        <div className="grid gap-8 border-t border-slate-200 pt-8 md:grid-cols-[1.1fr_.9fr_.9fr]">
+          <div>
+            <div className="flex items-center gap-3">
+              <span className="grid size-11 place-items-center rounded-2xl bg-black text-white">
+                <Compass className="size-5" />
+              </span>
+              <div>
+                <h2 className="text-xl font-black">NexaGen</h2>
+                <p className="text-sm font-semibold text-slate-500">Learning, practice, and verified progress.</p>
+              </div>
+            </div>
+            <p className="mt-4 max-w-xl text-sm leading-7 text-slate-600">
+              NexaGen uses backend-verified unlocks. Guests can learn free modules without saving progress. Premium progress, subtopic unlocks, and payment checks stay tied to authenticated accounts.
+            </p>
+          </div>
+          <div>
+            <h3 className="font-black">Contact</h3>
+            <div className="mt-4 grid gap-3 text-sm font-semibold text-slate-600">
+              <a className="inline-flex items-center gap-2 hover:text-black" href="mailto:nexagen656@gmail.com">
+                <MessageCircle className="size-4 text-black" />
+                nexagen656@gmail.com
+              </a>
+              <a className="inline-flex items-center gap-2 hover:text-black" href="tel:+254719637416">
+                <Headphones className="size-4 text-black" />
+                +254 719 637 416
+              </a>
+              <span className="inline-flex items-center gap-2">
+                <Compass className="size-4 text-black" />
+                Nairobi, Kenya
+              </span>
+            </div>
+          </div>
+          <div>
+            <h3 className="font-black">Social Links</h3>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {[
+                ['GitHub', Code2, 'https://github.com/'],
+                ['LinkedIn', Laptop, 'https://www.linkedin.com/'],
+                ['Instagram', Sparkles, 'https://www.instagram.com/'],
+                ['YouTube', Play, 'https://www.youtube.com/'],
+              ].map(([label, Icon, href]) => (
+                <a
+                  aria-label={label as string}
+                  className="grid size-11 place-items-center rounded-full border border-slate-200 bg-white text-black shadow-sm transition hover:bg-black hover:text-white"
+                  href={href as string}
+                  key={label as string}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  <Icon className="size-5" />
+                </a>
+              ))}
+            </div>
+            <p className="mt-4 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 shadow-sm">Payments by IntaSend</p>
+          </div>
+        </div>
+        <div className="mt-8 flex flex-col gap-2 border-t border-slate-200 pt-5 text-xs font-semibold text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+          <span>© {new Date().getFullYear()} NexaGen Technology Ltd. All rights reserved.</span>
+          <span>Powered by GracyAI</span>
+        </div>
       </footer>
 
       <FloatingLearningAssistant
@@ -2122,17 +2180,28 @@ function ProgrammingDashboard({
   const [level, setLevel] = useState<SkillLevel>(programmingLevel ?? 'beginner')
   const [language, setLanguage] = useState<ProgrammingLanguage>(programmingLanguages[0])
   const [subtopic, setSubtopic] = useState<ProgrammingSubtopic>(programmingSubtopics[0])
+  const [questionIndex, setQuestionIndex] = useState(0)
+  const [expandedProgrammingSubtopicId, setExpandedProgrammingSubtopicId] = useState<string | null>(null)
   const workbenchRef = useRef<HTMLDivElement | null>(null)
-  const filteredQuestions = programmingQuestions.filter((question) => question.level === level || question.subtopicId === subtopic.id)
-  const [question, setQuestion] = useState<ProgrammingQuestion>(filteredQuestions[0] ?? programmingQuestions[0])
+  const activeQuestions = useMemo(() => {
+    const exact = programmingQuestions.filter((item) => item.level === level && item.subtopicId === subtopic.id)
+    const languageHasFullRotation = ['python', 'javascript', 'typescript'].includes(language.id)
+    if (exact.length && !languageHasFullRotation) return exact.slice(0, 1)
+    return exact.length ? exact : programmingQuestions.filter((item) => item.level === level)
+  }, [language.id, level, subtopic.id])
+  const question = activeQuestions[questionIndex] ?? activeQuestions[0] ?? programmingQuestions[0]
+  const expandedProgrammingSubtopic = programmingSubtopics.find((item) => item.id === expandedProgrammingSubtopicId) ?? null
 
-  useEffect(() => {
-    const next = programmingQuestions.find((item) => item.level === level && item.subtopicId === subtopic.id) ?? programmingQuestions.find((item) => item.level === level) ?? programmingQuestions[0]
-    setQuestion(next)
-  }, [level, subtopic.id])
+  const moveQuestion = (direction: 1 | -1) => {
+    setQuestionIndex((current) => {
+      const total = activeQuestions.length || 1
+      return (current + direction + total) % total
+    })
+  }
 
   const chooseLevel = async (nextLevel: SkillLevel) => {
     setLevel(nextLevel)
+    setQuestionIndex(0)
     setWelcomeOpen(false)
     await onProgrammingLevelChange(nextLevel)
   }
@@ -2156,7 +2225,7 @@ function ProgrammingDashboard({
         <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h3 className="text-xl font-black">Choose a language</h3>
-            <p className="mt-1 text-sm font-semibold text-slate-500">20 languages, one practice flow.</p>
+            <p className="mt-1 text-sm font-semibold text-slate-500">20 languages, each with native practice examples.</p>
           </div>
           <span className="rounded-full bg-white px-3 py-1 text-sm font-black text-slate-700">{level} mode</span>
         </div>
@@ -2179,6 +2248,40 @@ function ProgrammingDashboard({
               <p className="mt-3 text-xs font-bold text-slate-500">{item.frameworks.join(' / ')}</p>
             </button>
           ))}
+        </div>
+        <div className="mt-5 rounded-2xl border border-slate-100 bg-white p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p className="text-sm font-bold uppercase tracking-[.16em] text-teal-700">{language.name} learning feed</p>
+              <h3 className="mt-1 text-2xl font-black">{language.project}</h3>
+              <p className="mt-2 max-w-4xl leading-7 text-slate-600">{language.description}</p>
+            </div>
+            <span className="rounded-full bg-slate-950 px-4 py-2 text-sm font-black text-white">{language.useCases.join(' / ')}</span>
+          </div>
+          <div className="mt-4 grid gap-3 lg:grid-cols-4">
+            <div className="rounded-xl bg-slate-50 p-3">
+              <h4 className="font-black">Strengths</h4>
+              <ul className="mt-2 space-y-1 text-sm leading-6 text-slate-600">
+                {language.strengths.map((item) => <li key={item}>{item}</li>)}
+              </ul>
+            </div>
+            <div className="rounded-xl bg-slate-50 p-3">
+              <h4 className="font-black">Learn First</h4>
+              <ul className="mt-2 space-y-1 text-sm leading-6 text-slate-600">
+                {language.learnFirst.map((item) => <li key={item}>{item}</li>)}
+              </ul>
+            </div>
+            <div className="rounded-xl bg-slate-50 p-3">
+              <h4 className="font-black">Avoid</h4>
+              <ul className="mt-2 space-y-1 text-sm leading-6 text-slate-600">
+                {language.pitfalls.map((item) => <li key={item}>{item}</li>)}
+              </ul>
+            </div>
+            <div className="rounded-xl bg-teal-50 p-3">
+              <h4 className="font-black">Interview Focus</h4>
+              <p className="mt-2 text-sm leading-6 text-slate-700">{language.interviewFocus}</p>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -2203,7 +2306,12 @@ function ProgrammingDashboard({
               <button
                 className={`rounded-xl border p-3 text-left ${subtopic.id === item.id ? 'border-teal-300 bg-teal-50' : 'border-slate-100 bg-slate-50'}`}
                 key={item.id}
-                onClick={() => setSubtopic(item)}
+                onClick={() => {
+                  setSubtopic(item)
+                  setLevel(item.level)
+                  setQuestionIndex(0)
+                  setExpandedProgrammingSubtopicId(item.id)
+                }}
               >
                 <span className="block font-black">{item.title}</span>
                 <span className="text-xs font-bold uppercase tracking-[.12em] text-slate-500">{item.level}</span>
@@ -2213,12 +2321,77 @@ function ProgrammingDashboard({
         </div>
         <ProgrammingIde
           appUser={appUser}
+          currentQuestion={Math.min(questionIndex + 1, activeQuestions.length || 1)}
+          key={`${language.id}-${level}-${question.id}`}
           language={language}
           level={level}
+          onMoveQuestion={moveQuestion}
           question={question}
+          questionCount={activeQuestions.length || 1}
           subtopic={subtopic}
         />
       </section>
+
+      <AnimatePresence>
+        {expandedProgrammingSubtopic && (
+          <motion.section
+            animate={{ opacity: 1, y: 0 }}
+            className="fixed inset-0 z-[80] overflow-y-auto bg-white text-slate-950"
+            exit={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 20 }}
+          >
+            <div className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 backdrop-blur-xl">
+              <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[.18em] text-slate-500">Programming subtopic</p>
+                  <h2 className="text-2xl font-black">{language.name} / {expandedProgrammingSubtopic.title}</h2>
+                </div>
+                <button
+                  aria-label="Close subtopic"
+                  className="grid size-11 place-items-center rounded-full bg-black text-white"
+                  onClick={() => setExpandedProgrammingSubtopicId(null)}
+                >
+                  <X className="size-5" />
+                </button>
+              </div>
+            </div>
+            <div className="mx-auto grid max-w-7xl gap-6 px-4 py-6 xl:grid-cols-[360px_minmax(0,1fr)]">
+              <aside className="space-y-4">
+                <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                  <p className="text-sm font-bold uppercase tracking-[.16em] text-slate-500">{language.name} feed</p>
+                  <h3 className="mt-2 text-2xl font-black">{language.project}</h3>
+                  <p className="mt-3 leading-7 text-slate-700">{language.description}</p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                  <h4 className="font-black">Learn First</h4>
+                  <ul className="mt-3 space-y-2 text-sm font-semibold leading-6 text-slate-600">
+                    {language.learnFirst.map((item) => <li key={item}>{item}</li>)}
+                  </ul>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                  <h4 className="font-black">Avoid</h4>
+                  <ul className="mt-3 space-y-2 text-sm font-semibold leading-6 text-slate-600">
+                    {language.pitfalls.map((item) => <li key={item}>{item}</li>)}
+                  </ul>
+                </div>
+              </aside>
+              <main>
+                <ProgrammingIde
+                  appUser={appUser}
+                  currentQuestion={Math.min(questionIndex + 1, activeQuestions.length || 1)}
+                  key={`fullscreen-${language.id}-${level}-${question.id}`}
+                  language={language}
+                  level={level}
+                  onMoveQuestion={moveQuestion}
+                  question={question}
+                  questionCount={activeQuestions.length || 1}
+                  subtopic={expandedProgrammingSubtopic}
+                />
+              </main>
+            </div>
+          </motion.section>
+        )}
+      </AnimatePresence>
 
       <LanguageCompare level={level} />
 
@@ -2261,15 +2434,21 @@ function ProgrammingWelcomeModal({
 
 function ProgrammingIde({
   appUser,
+  currentQuestion,
   language,
   level,
+  onMoveQuestion,
   question,
+  questionCount,
   subtopic,
 }: {
   appUser: AppUser
+  currentQuestion: number
   language: ProgrammingLanguage
   level: SkillLevel
+  onMoveQuestion: (direction: 1 | -1) => void
   question: ProgrammingQuestion
+  questionCount: number
   subtopic: ProgrammingSubtopic
 }) {
   const initialSeconds = timerByLevel[level]
@@ -2278,14 +2457,6 @@ function ProgrammingIde({
   const [revealed, setRevealed] = useState(false)
   const [output, setOutput] = useState('Console ready. Run code when you are ready.')
   const [hintOpen, setHintOpen] = useState(false)
-
-  useEffect(() => {
-    setCode(codeForLanguage(language.id, question.starter))
-    setSecondsLeft(timerByLevel[level])
-    setRevealed(false)
-    setHintOpen(false)
-    setOutput('New challenge loaded. Timer started.')
-  }, [language.id, level, question.id])
 
   useEffect(() => {
     if (revealed) return
@@ -2354,6 +2525,7 @@ function ProgrammingIde({
         <div>
           <p className="text-sm font-bold uppercase tracking-[.16em] text-teal-700">{language.name} / {subtopic.title}</p>
           <h3 className="mt-1 text-xl font-black">{question.question}</h3>
+          <p className="mt-2 text-sm font-bold text-slate-500">Challenge {currentQuestion} of {questionCount}</p>
         </div>
         <span className={`rounded-full px-3 py-1 text-sm font-black ${revealed ? 'bg-teal-50 text-teal-700' : 'bg-amber-50 text-amber-700'}`}>
           {revealed ? 'Answer unlocked' : `${secondsLeft}s locked`}
@@ -2367,6 +2539,8 @@ function ProgrammingIde({
         <button className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700" onClick={reset}>Try Again</button>
         <button className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700" onClick={() => setHintOpen(!hintOpen)}>Show Hint</button>
         <button className="rounded-full bg-teal-700 px-4 py-2 text-sm font-bold text-white" onClick={complete}>Mark solved</button>
+        <button className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700" onClick={() => onMoveQuestion(-1)}>Previous</button>
+        <button className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700" onClick={() => onMoveQuestion(1)}>Next challenge</button>
       </div>
       <div className="mt-4 rounded-2xl bg-slate-950 p-4 font-mono text-sm leading-6 text-slate-100">{output}</div>
       {hintOpen && <p className="mt-3 rounded-2xl bg-amber-50 p-4 font-semibold leading-7 text-amber-900">{question.hint}</p>}
@@ -2576,11 +2750,14 @@ function PianoDashboard({
 }) {
   const [answers, setAnswers] = useState<Record<number, string>>({})
   const [selectedSubtopicId, setSelectedSubtopicId] = useState(subtopics[0]?.id ?? '')
+  const [expandedSubtopicId, setExpandedSubtopicId] = useState<string | null>(null)
   const selectedSubtopic = subtopics.find((subtopic) => subtopic.id === selectedSubtopicId) ?? subtopics[0]
+  const expandedSubtopic = subtopics.find((subtopic) => subtopic.id === expandedSubtopicId) ?? null
   const visualProfile = visualProfileFor(selectedSubtopic?.title)
   const selectedItems = items
     .filter((item) => item.subtopic_id === selectedSubtopic?.id)
     .filter((item) => `${item.title} ${item.body}`.toLowerCase().includes(query.toLowerCase()))
+  const expandedItems = expandedSubtopic ? items.filter((item) => item.subtopic_id === expandedSubtopic.id) : []
   const selectedCompleted = selectedItems.filter((item) => completed.includes(item.id)).length
   const subtopicProgress = selectedItems.length ? Math.round((selectedCompleted / selectedItems.length) * 100) : 0
 
@@ -2612,6 +2789,7 @@ function PianoDashboard({
   }
 
   return (
+    <>
     <article className="relative overflow-hidden rounded-[1.5rem] border border-slate-100 bg-white p-5 shadow-xl shadow-slate-200/70 md:p-7">
       <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
         <div>
@@ -2686,6 +2864,7 @@ function PianoDashboard({
                   key={subtopic.id}
                   onClick={() => {
                     setSelectedSubtopicId(subtopic.id)
+                    setExpandedSubtopicId(subtopic.id)
                     void trackUserActivity({ userId: appUser.user?.id, action: 'subtopic_opened', dashboardId: dashboard.id, subtopicId: subtopic.id })
                   }}
                 >
@@ -2739,6 +2918,59 @@ function PianoDashboard({
         </div>
       </div>
     </article>
+    <AnimatePresence>
+      {expandedSubtopic && (
+        <motion.section
+          animate={{ opacity: 1, y: 0 }}
+          className="fixed inset-0 z-[80] overflow-y-auto bg-white text-slate-950"
+          exit={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 20 }}
+        >
+          <div className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 backdrop-blur-xl">
+            <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[.18em] text-slate-500">Piano subtopic</p>
+                <h2 className="text-2xl font-black">{expandedSubtopic.title}</h2>
+              </div>
+              <button
+                aria-label="Close subtopic"
+                className="grid size-11 place-items-center rounded-full bg-black text-white"
+                onClick={() => setExpandedSubtopicId(null)}
+              >
+                <X className="size-5" />
+              </button>
+            </div>
+          </div>
+          <div className="mx-auto grid max-w-7xl gap-6 px-4 py-6 xl:grid-cols-[.85fr_1.15fr]">
+            <aside className="space-y-4">
+              <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                <p className="text-sm font-bold uppercase tracking-[.16em] text-slate-500">Description</p>
+                <p className="mt-3 leading-7 text-slate-700">{expandedSubtopic.description}</p>
+              </div>
+              <VisualPracticeLab profile={visualProfileFor(expandedSubtopic.title)} subtopicTitle={expandedSubtopic.title} />
+              <PdfResource dashboard={{ ...dashboard, title: expandedSubtopic.title }} isUnlocked />
+            </aside>
+            <main>
+              <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <p className="text-sm font-bold uppercase tracking-[.16em] text-slate-500">Full Content</p>
+                  <h3 className="text-3xl font-black">{expandedItems.length} learning cards</h3>
+                </div>
+                <span className="rounded-full border border-slate-200 px-4 py-2 text-sm font-black text-slate-700">
+                  Theory + practical flow
+                </span>
+              </div>
+              <div className="grid gap-3">
+                {expandedItems.map((item) => (
+                  <QnaItem appUser={appUser} completed={completed.includes(item.id)} item={item} key={item.id} onToggle={() => toggleCompleted(item.id)} />
+                ))}
+              </div>
+            </main>
+          </div>
+        </motion.section>
+      )}
+    </AnimatePresence>
+    </>
   )
 }
 
