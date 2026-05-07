@@ -2,19 +2,25 @@ import { AnimatePresence, motion, useMotionValue, useTransform } from 'framer-mo
 import {
   ArrowLeft,
   BarChart3,
+  BadgeCheck,
   BookOpen,
   CheckCircle2,
   ChevronDown,
   Code2,
   Compass,
+  Coffee,
+  CreditCard,
   Download,
   Eye,
+  EyeOff,
   FileText,
   Flame,
   Headphones,
+  HeartHandshake,
   Laptop,
   LockKeyhole,
   LogOut,
+  Mail,
   Medal,
   Menu,
   MessageCircle,
@@ -22,8 +28,10 @@ import {
   Pause,
   Play,
   Search,
+  Send,
   ShieldCheck,
   Sparkles,
+  Star,
   Terminal,
   Trophy,
   UnlockKeyhole,
@@ -61,7 +69,7 @@ import {
   type ProgrammingSubtopic,
 } from './data/programmingContent'
 import { useDebouncedValue } from './hooks/useDebouncedValue'
-import { supabase } from './lib/supabase'
+import { supabase, supabaseConfigured } from './lib/supabase'
 import {
   askLearningAssistant,
   awardXp,
@@ -72,7 +80,6 @@ import {
   type RevisionCard,
 } from './services/learningService'
 import {
-  createPayment,
   findSongCache,
   getCompletedContent,
   getContentItems,
@@ -88,10 +95,16 @@ import {
   setContentCompleted,
   setUserLevel,
   TEST_MODE,
+  activateTestSubscription,
+  getActiveSubscription,
   trackUserActivity,
   unlockSubtopicForTest,
+  subscribeNewsletter,
+  submitRating,
+  type SubscriptionPlan,
+  type UserSubscription,
 } from './services/nexagenService'
-import type { AppUser, ContentItem, Dashboard, PaymentState, SkillLevel, Subtopic } from './types/nexagen'
+import type { AppUser, ContentItem, Dashboard, SkillLevel, Subtopic } from './types/nexagen'
 
 const Editor = lazy(() => import('@monaco-editor/react'))
 
@@ -103,6 +116,23 @@ const visuals = [
 
 const interests = ['Music', 'Programming', 'Operating Systems', 'PowerShell', 'Computer Basics']
 const defaultPdfPath = '/javacript.pdf'
+
+const availableDashboardSlugs = ['piano-12-keys', 'programming']
+
+const dashboardAccessKey = (dashboard: Dashboard) => {
+  const slug = slugForDashboard(dashboard.title)
+  return slug.includes('programming') ? 'programming' : slug.includes('piano') ? 'piano-12-keys' : slug
+}
+
+const dashboardIsSubscriptionUnlocked = (dashboard: Dashboard, subscription: UserSubscription | null) => {
+  if (!subscription) return false
+  if (new Date(subscription.expires_at).getTime() <= Date.now()) return false
+  if (subscription.plan === 'pro' || subscription.dashboards_access.includes('all')) return availableDashboardSlugs.includes(dashboardAccessKey(dashboard))
+  return subscription.dashboards_access.includes(dashboardAccessKey(dashboard))
+}
+
+const buildEffectiveUnlocks = (dashboards: Dashboard[], unlocks: string[], subscription: UserSubscription | null) =>
+  Array.from(new Set([...unlocks, ...dashboards.filter((dashboard) => dashboardIsSubscriptionUnlocked(dashboard, subscription)).map((dashboard) => dashboard.id)]))
 
 type NexaGenState = {
   user: AppUser
@@ -244,10 +274,13 @@ function App() {
   const [unlocks, setUnlocks] = useState<string[]>([])
   const [subtopicUnlocks, setSubtopicUnlocks] = useState<string[]>([])
   const [completed, setCompleted] = useState<string[]>([])
+  const [subscription, setSubscription] = useState<UserSubscription | null>(null)
   const [pianoLevel, setPianoLevelState] = useState<SkillLevel | null>(() => localStorage.getItem('nexagen:piano-level') as SkillLevel | null)
   const [programmingLevel, setProgrammingLevelState] = useState<SkillLevel | null>(() => localStorage.getItem('nexagen:programming-level') as SkillLevel | null)
 
   useEffect(() => {
+    if (!supabaseConfigured) return
+
     supabase.auth.getSession().then(({ data }) => {
       if (data.session?.user) setAppUser({ mode: 'authenticated', user: data.session.user })
     })
@@ -273,6 +306,7 @@ function App() {
       setUnlocks([])
       setSubtopicUnlocks(TEST_MODE ? subtopics.map((subtopic) => subtopic.id) : [])
       setCompleted([])
+      setSubscription(null)
       return
     }
 
@@ -282,12 +316,14 @@ function App() {
       getCompletedContent(appUser.user.id),
       getUserLevel(appUser.user.id),
       getProgrammingLevel(appUser.user.id),
-    ]).then(([unlockRows, subtopicUnlockRows, completedRows, level, savedProgrammingLevel]) => {
+      getActiveSubscription(appUser.user.id),
+    ]).then(([unlockRows, subtopicUnlockRows, completedRows, level, savedProgrammingLevel, activeSubscription]) => {
         setUnlocks(unlockRows)
         setSubtopicUnlocks(subtopicUnlockRows)
         setCompleted(completedRows)
         if (level) setPianoLevelState(level)
         if (savedProgrammingLevel) setProgrammingLevelState(savedProgrammingLevel)
+        setSubscription(activeSubscription)
       })
   }, [appUser.user, subtopics])
 
@@ -298,16 +334,6 @@ function App() {
   }
 
   const selectedDashboard = dashboards.find((dashboard) => dashboard.id === selectedId) ?? dashboards[0]
-
-  const refreshUserState = async () => {
-    if (!appUser.user) return
-    const [unlockRows, completedRows] = await Promise.all([
-      getUserUnlocks(appUser.user.id),
-      getCompletedContent(appUser.user.id),
-    ])
-    setUnlocks(unlockRows)
-    setCompleted(completedRows)
-  }
 
   const savePianoLevel = async (level: SkillLevel) => {
     setPianoLevelState(level)
@@ -338,8 +364,8 @@ function App() {
           onCompletedChange={setCompleted}
           onPianoLevelChange={savePianoLevel}
           onProgrammingLevelChange={saveCodeLevel}
-          onRefresh={refreshUserState}
           onSelected={setSelectedId}
+          onSubscriptionChange={setSubscription}
           selectedDashboard={selectedDashboard}
           pianoLevel={pianoLevel}
           programmingLevel={programmingLevel}
@@ -347,6 +373,7 @@ function App() {
           subtopics={subtopics}
           onSubtopicUnlock={(id) => setSubtopicUnlocks((current) => Array.from(new Set([...current, id])))}
           unlocks={unlocks}
+          subscription={subscription}
         />
       </NexaGenContext.Provider>
     </main>
@@ -385,7 +412,7 @@ function Onboarding({ onFinish }: { onFinish: (mode: 'auth' | 'guest') => void }
 
   return (
     <motion.section
-      className="fixed inset-0 z-50 grid place-items-center bg-[#f8fbff] px-4"
+      className="fixed inset-0 z-50 overflow-y-auto bg-[#f8fbff] px-3 py-3 sm:px-4 sm:py-6 md:grid md:place-items-center"
       exit={{ opacity: 0, scale: 1.02 }}
     >
       <motion.div
@@ -396,7 +423,7 @@ function Onboarding({ onFinish }: { onFinish: (mode: 'auth' | 'guest') => void }
         }}
       />
       <motion.div
-        className="relative grid w-full max-w-6xl items-center gap-8 rounded-[2rem] border border-white bg-white/70 p-5 shadow-2xl shadow-slate-200/80 backdrop-blur-xl md:grid-cols-[1.05fr_.95fr] md:p-8"
+        className="relative mx-auto grid w-full max-w-6xl items-center gap-4 rounded-[1.5rem] border border-white bg-white/80 p-4 shadow-2xl shadow-slate-200/80 backdrop-blur-xl sm:gap-6 sm:p-5 md:grid-cols-[1.05fr_.95fr] md:gap-8 md:rounded-[2rem] md:p-8"
         drag="x"
         dragConstraints={{ left: 0, right: 0 }}
         onDragEnd={(_, info) => {
@@ -405,7 +432,7 @@ function Onboarding({ onFinish }: { onFinish: (mode: 'auth' | 'guest') => void }
         }}
         style={{ x: dragX, rotate }}
       >
-        <div className="relative min-h-[440px] overflow-hidden rounded-[1.5rem] bg-slate-950">
+        <div className="relative hidden min-h-[200px] overflow-hidden rounded-[1.25rem] bg-slate-950 sm:block md:min-h-[440px] md:rounded-[1.5rem]">
           {visuals.map((src, index) => (
             <motion.img
               alt=""
@@ -426,8 +453,8 @@ function Onboarding({ onFinish }: { onFinish: (mode: 'auth' | 'guest') => void }
           </motion.div>
         </div>
 
-        <div className="p-2 md:p-4">
-          <div className="mb-8 flex gap-2">
+        <div className="p-0 md:p-4">
+          <div className="mb-5 flex gap-2 md:mb-8">
             {slides.map((slide, index) => (
               <button
                 aria-label={slide.title}
@@ -445,12 +472,12 @@ function Onboarding({ onFinish }: { onFinish: (mode: 'auth' | 'guest') => void }
               key={current.title}
               transition={{ duration: 0.35 }}
             >
-              <p className="mb-3 text-sm font-semibold uppercase tracking-[.18em] text-teal-700">NexaGen Learning</p>
-              <h1 className="max-w-xl text-4xl font-black leading-tight text-slate-950 md:text-6xl">{current.title}</h1>
-              <p className="mt-5 max-w-xl text-lg leading-8 text-slate-600">{current.copy}</p>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-[.16em] text-teal-700 sm:text-sm md:mb-3 md:tracking-[.18em]">NexaGen Learning</p>
+              <h1 className="max-w-xl text-3xl font-black leading-tight text-slate-950 sm:text-4xl md:text-6xl">{current.title}</h1>
+              <p className="mt-3 max-w-xl text-base leading-7 text-slate-600 md:mt-5 md:text-lg md:leading-8">{current.copy}</p>
 
               {step === 1 && (
-                <div className="mt-8 flex flex-wrap gap-3">
+                <div className="mt-5 flex flex-wrap gap-2 md:mt-8 md:gap-3">
                   {interests.map((interest) => (
                     <button className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold shadow-sm" key={interest}>
                       {interest}
@@ -460,7 +487,7 @@ function Onboarding({ onFinish }: { onFinish: (mode: 'auth' | 'guest') => void }
               )}
 
               {step === 2 && (
-                <div className="mt-8 grid gap-3 sm:grid-cols-2">
+                <div className="mt-5 grid gap-2 sm:grid-cols-2 md:mt-8 md:gap-3">
                   {['12 keys', 'Music theory', 'Q&A reinforcement', 'Shell troubleshooting', 'PDF ready', 'Progress tracking'].map(
                     (benefit) => (
                       <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 text-sm font-semibold" key={benefit}>
@@ -474,22 +501,22 @@ function Onboarding({ onFinish }: { onFinish: (mode: 'auth' | 'guest') => void }
             </motion.div>
           </AnimatePresence>
 
-          <div className="mt-10 flex flex-wrap gap-3">
+          <div className="mt-6 grid gap-3 sm:flex sm:flex-wrap md:mt-10">
             {step < slides.length - 1 ? (
               <>
-                <button className="rounded-full bg-slate-950 px-6 py-3 font-bold text-white shadow-lg" onClick={() => setStep(step + 1)}>
+                <button className="w-full rounded-full bg-slate-950 px-6 py-3 font-bold text-white shadow-lg sm:w-auto" onClick={() => setStep(step + 1)}>
                   {current.action}
                 </button>
-                <button className="rounded-full px-6 py-3 font-bold text-slate-600" onClick={() => onFinish('guest')}>
+                <button className="w-full rounded-full px-6 py-3 font-bold text-slate-600 sm:w-auto" onClick={() => onFinish('guest')}>
                   Skip
                 </button>
               </>
             ) : (
               <>
-                <button className="rounded-full bg-slate-950 px-6 py-3 font-bold text-white shadow-lg" onClick={() => onFinish('auth')}>
+                <button className="w-full rounded-full bg-slate-950 px-5 py-3 font-bold text-white shadow-lg sm:w-auto sm:px-6" onClick={() => onFinish('auth')}>
                   Proceed with Authentication
                 </button>
-                <button className="rounded-full border border-slate-200 bg-white px-6 py-3 font-bold text-slate-700" onClick={() => onFinish('guest')}>
+                <button className="w-full rounded-full border border-slate-200 bg-white px-5 py-3 font-bold text-slate-700 sm:w-auto sm:px-6" onClick={() => onFinish('guest')}>
                   Continue as Guest
                 </button>
               </>
@@ -512,14 +539,15 @@ type LandingShellProps = {
   onCompletedChange: (ids: string[]) => void
   onPianoLevelChange: (level: SkillLevel) => Promise<void>
   onProgrammingLevelChange: (level: SkillLevel) => Promise<void>
-  onRefresh: () => Promise<void>
   onSelected: (id: string) => void
   onSubtopicUnlock: (id: string) => void
+  onSubscriptionChange: (subscription: UserSubscription | null) => void
   pianoLevel: SkillLevel | null
   programmingLevel: SkillLevel | null
   selectedDashboard?: Dashboard
   subtopicUnlocks: string[]
   subtopics: Subtopic[]
+  subscription: UserSubscription | null
   unlocks: string[]
 }
 
@@ -535,14 +563,15 @@ function LandingShell(props: LandingShellProps) {
     onCompletedChange,
     onPianoLevelChange,
     onProgrammingLevelChange,
-    onRefresh,
     onSelected,
     onSubtopicUnlock,
+    onSubscriptionChange,
     pianoLevel,
     programmingLevel,
     selectedDashboard,
     subtopicUnlocks,
     subtopics,
+    subscription,
     unlocks,
   } = props
   const [query, setQuery] = useState('')
@@ -551,6 +580,7 @@ function LandingShell(props: LandingShellProps) {
   const [analyticsOpen, setAnalyticsOpen] = useState(false)
   const [focusedDashboardId, setFocusedDashboardId] = useState<string | null>(null)
   const [revisionCards, setRevisionCards] = useState<RevisionCard[]>([])
+  const effectiveUnlocks = useMemo(() => buildEffectiveUnlocks(dashboards, unlocks, subscription), [dashboards, subscription, unlocks])
 
   const openDashboardWorkspace = (id: string) => {
     onSelected(id)
@@ -600,6 +630,15 @@ function LandingShell(props: LandingShellProps) {
 
   return (
     <>
+      <div className="ticker-bar group sticky top-0 z-40 overflow-hidden bg-[#103b4a] py-2 text-sm font-bold text-white shadow-lg">
+        <div className="ticker-track flex min-w-max gap-12 whitespace-nowrap">
+          {[0, 1].map((item) => (
+            <span key={item}>
+              Currently only 2 dashboards are available - Piano and Programming - each packed with everything you need to master your favorite skills. More dashboards are coming soon. Subscribe to our newsletter to stay updated.
+            </span>
+          ))}
+        </div>
+      </div>
       <header className="sticky top-0 z-30 border-b border-white/70 bg-white/75 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4">
           <button className="flex items-center gap-3" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
@@ -696,7 +735,7 @@ function LandingShell(props: LandingShellProps) {
       </section>
 
       <GlobalSearch dashboards={dashboards} content={content} onOpenDashboard={openDashboardWorkspace} songs={songProgressions} subtopics={subtopics} />
-      <ExploreDashboards dashboards={dashboards} onSelected={openDashboardWorkspace} selectedDashboard={selectedDashboard} unlocks={unlocks} />
+      <ExploreDashboards dashboards={dashboards} onSelected={openDashboardWorkspace} selectedDashboard={selectedDashboard} unlocks={effectiveUnlocks} />
       <SongLandingPlayer />
       {appUser.user ? (
         <PersonalizedHome completed={completed} content={content} dashboards={dashboards} onOpenDashboard={openDashboardWorkspace} subtopics={subtopics} />
@@ -705,7 +744,15 @@ function LandingShell(props: LandingShellProps) {
       )}
       <DailyChallenge appUser={appUser} onOpenDashboard={openDashboardWorkspace} dashboards={dashboards} />
       <ProgrammingValueSection />
+      <SaasPricingSection
+        appUser={appUser}
+        dashboards={dashboards}
+        onAuthOpen={onAuthOpen}
+        onSubscriptionChange={onSubscriptionChange}
+        subscription={subscription}
+      />
       <SongPracticeLibrary />
+      <LaunchTrustSections appUser={appUser} />
       <ValueSections />
 
       <section className="mx-auto grid max-w-7xl gap-6 px-4 py-8 lg:grid-cols-[.8fr_1.2fr]" id="dashboards">
@@ -719,7 +766,7 @@ function LandingShell(props: LandingShellProps) {
           <div className="grid gap-4 sm:grid-cols-2">
             {dashboards.map((dashboard) => {
               const Icon = iconFor(dashboard.title)
-              const isUnlocked = !dashboard.is_locked || unlocks.includes(dashboard.id)
+              const isUnlocked = !dashboard.is_locked || effectiveUnlocks.includes(dashboard.id)
               return (
                 <button
                   className={`rounded-2xl border bg-white p-5 text-left shadow-sm transition hover:-translate-y-1 hover:shadow-xl ${
@@ -779,7 +826,7 @@ function LandingShell(props: LandingShellProps) {
             setQuery={setQuery}
             subtopicUnlocks={subtopicUnlocks}
             subtopics={subtopics}
-            unlocks={unlocks}
+            unlocks={effectiveUnlocks}
           />
         )}
       </AnimatePresence>
@@ -792,7 +839,7 @@ function LandingShell(props: LandingShellProps) {
         pianoLevel={pianoLevel}
         subtopicUnlocks={subtopicUnlocks}
         subtopics={subtopics}
-        unlocks={unlocks}
+        unlocks={effectiveUnlocks}
       />
 
       <footer className="mx-auto max-w-7xl px-4 py-12 text-slate-800">
@@ -808,8 +855,9 @@ function LandingShell(props: LandingShellProps) {
               </div>
             </div>
             <p className="mt-4 max-w-xl text-sm leading-7 text-slate-600">
-              NexaGen uses backend-verified unlocks. Guests can learn free modules without saving progress. Premium progress, subtopic unlocks, and payment checks stay tied to authenticated accounts.
+              NexaGen now uses subscription-ready access. Guests can preview the experience, while saved progress and dashboard access stay tied to authenticated accounts.
             </p>
+            <NewsletterSignup />
           </div>
           <div>
             <h3 className="font-black">Contact</h3>
@@ -887,7 +935,6 @@ function LandingShell(props: LandingShellProps) {
           <UnlockModal
             dashboard={unlockTarget}
             onClose={() => setUnlockTarget(null)}
-            onRefresh={onRefresh}
             userId={appUser.user?.id}
           />
         )}
@@ -1711,6 +1758,260 @@ function SongPracticeLibrary() {
   )
 }
 
+function SaasPricingSection({
+  appUser,
+  dashboards,
+  onAuthOpen,
+  onSubscriptionChange,
+  subscription,
+}: {
+  appUser: AppUser
+  dashboards: Dashboard[]
+  onAuthOpen: () => void
+  onSubscriptionChange: (subscription: UserSubscription | null) => void
+  subscription: UserSubscription | null
+}) {
+  const [starterDashboard, setStarterDashboard] = useState('piano-12-keys')
+  const [message, setMessage] = useState('')
+  const [busyPlan, setBusyPlan] = useState<SubscriptionPlan | null>(null)
+  const starterOptions = dashboards
+    .filter((dashboard) => availableDashboardSlugs.includes(dashboardAccessKey(dashboard)))
+    .map((dashboard) => ({ label: dashboard.title, value: dashboardAccessKey(dashboard) }))
+  const activePlan = subscription ? `${subscription.plan.toUpperCase()} active until ${new Date(subscription.expires_at).toLocaleDateString()}` : 'Test a plan before payments go live'
+
+  const activate = async (plan: SubscriptionPlan) => {
+    if (!appUser.user) {
+      onAuthOpen()
+      return
+    }
+    setBusyPlan(plan)
+    setMessage('')
+    try {
+      const saved = await activateTestSubscription({
+        userId: appUser.user.id,
+        plan,
+        dashboardsAccess: plan === 'pro' ? ['all'] : [starterDashboard],
+      })
+      onSubscriptionChange(saved)
+      setMessage(`${plan === 'pro' ? 'Pro Access' : 'Starter Pass'} is active in test mode. Payment integration can come later.`)
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not activate subscription.')
+    } finally {
+      setBusyPlan(null)
+    }
+  }
+
+  const plans = [
+    {
+      plan: 'starter' as const,
+      name: 'Starter Pass',
+      price: 'KES 100',
+      accent: 'from-teal-600 to-cyan-500',
+      features: ['Access to 1 dashboard of choice', 'Full Q&A content', 'Practice environment', 'Progress tracking', 'Monthly new questions'],
+    },
+    {
+      plan: 'pro' as const,
+      name: 'Pro Access',
+      price: 'KES 150',
+      accent: 'from-indigo-600 to-teal-500',
+      features: ['Access to all available dashboards', 'Unlimited Q&A', 'Full coding IDE access', 'Full piano practice environment', 'Priority access to new content', 'Monthly new challenges'],
+    },
+  ]
+
+  return (
+    <section className="mx-auto max-w-7xl px-4 py-12" id="pricing">
+      <div className="mb-7 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+        <div>
+          <p className="text-sm font-bold uppercase tracking-[.16em] text-teal-700">SaaS Access</p>
+          <h2 className="mt-2 text-3xl font-black">Simple monthly plans</h2>
+          <p className="mt-3 max-w-2xl leading-7 text-slate-600">New challenges every month. Endless questions. Continuous growth.</p>
+        </div>
+        <span className="rounded-full border border-teal-100 bg-white px-4 py-2 text-sm font-black text-teal-800 shadow-sm">{activePlan}</span>
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-2">
+        {plans.map((item) => (
+          <div className="relative overflow-hidden rounded-[1.5rem] border border-white bg-white p-6 shadow-xl shadow-slate-200/80" key={item.name}>
+            {item.plan === 'pro' && <span className="absolute right-5 top-5 rounded-full bg-amber-100 px-3 py-1 text-xs font-black text-amber-800">Best Value</span>}
+            <div className={`mb-5 grid size-14 place-items-center rounded-2xl bg-gradient-to-br ${item.accent} text-white shadow-lg`}>
+              <CreditCard className="size-6" />
+            </div>
+            <h3 className="text-2xl font-black">{item.name}</h3>
+            <p className="mt-2 text-4xl font-black">{item.price}<span className="text-base font-bold text-slate-500"> / month</span></p>
+            {item.plan === 'starter' && (
+              <select className="mt-5 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 font-bold outline-none focus:border-teal-400" onChange={(event) => setStarterDashboard(event.target.value)} value={starterDashboard}>
+                {(starterOptions.length ? starterOptions : [{ label: 'Piano Dashboard', value: 'piano-12-keys' }, { label: 'Programming Dashboard', value: 'programming' }]).map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            )}
+            <div className="mt-5 grid gap-3">
+              {item.features.map((feature) => (
+                <span className="flex items-center gap-3 text-sm font-bold text-slate-700" key={feature}>
+                  <CheckCircle2 className="size-5 text-teal-600" />
+                  {feature}
+                </span>
+              ))}
+            </div>
+            <button className="mt-6 w-full rounded-full bg-slate-950 px-5 py-3 font-black text-white shadow-lg disabled:opacity-60" disabled={busyPlan === item.plan} onClick={() => activate(item.plan)}>
+              {busyPlan === item.plan ? 'Activating...' : appUser.user ? `Test ${item.name}` : 'Sign in to test'}
+            </button>
+          </div>
+        ))}
+      </div>
+      {message && <p className="mt-5 rounded-2xl bg-teal-50 p-4 text-sm font-bold text-teal-800">{message}</p>}
+    </section>
+  )
+}
+
+function LaunchTrustSections({ appUser }: { appUser: AppUser }) {
+  const partners = [
+    ['Zeraki', 'Education technology solutions'],
+    ['W3Schools', 'Programming reference and tutorials'],
+    ['IntaSend', 'Payment infrastructure'],
+    ['NCI', 'Certification and training'],
+    ['TopHeights Electricals', 'Technical and engineering support partner'],
+  ]
+
+  return (
+    <section className="mx-auto max-w-7xl px-4 py-12">
+      <div className="grid gap-6 lg:grid-cols-[.9fr_1.1fr]">
+        <div className="rounded-[1.5rem] border border-teal-100 bg-gradient-to-br from-white via-teal-50 to-amber-50 p-6 shadow-xl shadow-slate-200/70">
+          <p className="text-sm font-bold uppercase tracking-[.16em] text-teal-700">Certifications</p>
+          <h2 className="mt-2 text-3xl font-black">Certifications Coming Soon</h2>
+          <div className="mt-6 rounded-2xl border-4 border-double border-teal-700 bg-white p-6 text-center shadow-inner">
+            <BadgeCheck className="mx-auto size-14 text-teal-700" />
+            <h3 className="mt-3 text-2xl font-black">NexaGen Certificate</h3>
+            <p className="mt-2 text-sm font-bold text-slate-500">Official certifications are currently in development with our partners.</p>
+          </div>
+          <p className="mt-5 rounded-2xl bg-white/80 p-4 text-sm font-bold text-slate-700">NexaGen is a licensed business operating under registered compliance.</p>
+        </div>
+
+        <div className="rounded-[1.5rem] border border-slate-100 bg-white p-6 shadow-xl shadow-slate-200/70">
+          <p className="text-sm font-bold uppercase tracking-[.16em] text-teal-700">Partners and stakeholders</p>
+          <h2 className="mt-2 text-3xl font-black">Built with launch credibility in mind</h2>
+          <div className="mt-6 grid gap-3 sm:grid-cols-2">
+            {partners.map(([name, description]) => (
+              <div className="group rounded-2xl border border-slate-100 bg-slate-50 p-4 transition hover:-translate-y-1 hover:bg-white hover:shadow-lg" key={name}>
+                <div className="flex items-center gap-3">
+                  <span className="grid size-12 place-items-center rounded-2xl bg-slate-950 text-sm font-black text-white">{name.slice(0, 2).toUpperCase()}</span>
+                  <h3 className="font-black">{name}</h3>
+                </div>
+                <p className="mt-3 text-sm font-semibold leading-6 text-slate-500 opacity-80 group-hover:opacity-100">{description}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-6 grid gap-5 lg:grid-cols-3">
+        <ContactLaunchCard />
+        <SupportLaunchCard />
+        <RatingLaunchCard userId={appUser.user?.id} />
+      </div>
+    </section>
+  )
+}
+
+function ContactLaunchCard() {
+  return (
+    <div className="rounded-[1.5rem] border border-slate-100 bg-white p-5 shadow-xl shadow-slate-200/70">
+      <Mail className="size-7 text-teal-700" />
+      <h3 className="mt-3 text-xl font-black">Contact NexaGen</h3>
+      <a className="mt-4 flex items-center gap-2 rounded-2xl bg-teal-50 px-4 py-3 font-bold text-teal-800" href="https://wa.me/254719637416" rel="noreferrer" target="_blank">
+        <MessageCircle className="size-5" />
+        +254 719 637 416
+      </a>
+      <div className="mt-4 grid gap-3">
+        <input className="rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-teal-400" placeholder="Name" />
+        <input className="rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-teal-400" placeholder="Email" />
+        <textarea className="min-h-24 rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-teal-400" placeholder="Message" />
+        <button className="inline-flex items-center justify-center gap-2 rounded-full bg-slate-950 px-5 py-3 font-black text-white">
+          <Send className="size-4" />
+          EmailJS Placeholder
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function SupportLaunchCard() {
+  return (
+    <div className="rounded-[1.5rem] border border-slate-100 bg-white p-5 shadow-xl shadow-slate-200/70">
+      <Coffee className="size-7 text-amber-700" />
+      <h3 className="mt-3 text-xl font-black">Support the Team</h3>
+      <p className="mt-3 leading-7 text-slate-600">Buy the developers and engineers a coffee.</p>
+      <button className="mt-5 w-full rounded-full bg-amber-500 px-5 py-3 font-black text-slate-950 shadow-lg">Future payment button</button>
+      <div className="mt-6 rounded-2xl bg-slate-50 p-4">
+        <HeartHandshake className="size-6 text-teal-700" />
+        <h4 className="mt-2 font-black">Work With Us</h4>
+        <button className="mt-3 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-800">Request Collaboration</button>
+      </div>
+    </div>
+  )
+}
+
+function RatingLaunchCard({ userId }: { userId?: string }) {
+  const [rating, setRating] = useState(5)
+  const [feedback, setFeedback] = useState('')
+  const [message, setMessage] = useState('')
+
+  const save = async () => {
+    try {
+      await submitRating({ userId, rating, feedback })
+      setMessage('Thank you. Your rating was saved.')
+      setFeedback('')
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not save rating.')
+    }
+  }
+
+  return (
+    <div className="rounded-[1.5rem] border border-slate-100 bg-white p-5 shadow-xl shadow-slate-200/70">
+      <Star className="size-7 text-amber-500" />
+      <h3 className="mt-3 text-xl font-black">Rate NexaGen</h3>
+      <div className="mt-4 flex gap-2">
+        {[1, 2, 3, 4, 5].map((value) => (
+          <button className={`grid size-10 place-items-center rounded-full ${value <= rating ? 'bg-amber-400 text-slate-950' : 'bg-slate-100 text-slate-400'}`} key={value} onClick={() => setRating(value)}>
+            <Star className="size-5 fill-current" />
+          </button>
+        ))}
+      </div>
+      <textarea className="mt-4 min-h-28 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-teal-400" onChange={(event) => setFeedback(event.target.value)} placeholder="Optional feedback" value={feedback} />
+      <button className="mt-3 w-full rounded-full bg-slate-950 px-5 py-3 font-black text-white" onClick={save}>Save rating</button>
+      {message && <p className="mt-3 rounded-2xl bg-slate-50 p-3 text-sm font-bold text-slate-600">{message}</p>}
+    </div>
+  )
+}
+
+function NewsletterSignup() {
+  const [email, setEmail] = useState('')
+  const [message, setMessage] = useState('')
+
+  const save = async () => {
+    try {
+      await subscribeNewsletter(email)
+      setEmail('')
+      setMessage('Subscribed. We will share dashboard updates soon.')
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not subscribe right now.')
+    }
+  }
+
+  return (
+    <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <input className="min-w-0 flex-1 rounded-xl bg-slate-50 px-4 py-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-teal-300" onChange={(event) => setEmail(event.target.value)} placeholder="Email for launch updates" value={email} />
+        <button className="inline-flex items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 py-3 text-sm font-black text-white" onClick={save}>
+          <Mail className="size-4" />
+          Subscribe
+        </button>
+      </div>
+      {message && <p className="mt-2 text-xs font-bold text-slate-500">{message}</p>}
+    </div>
+  )
+}
+
 function ContentFeed() {
   const blocks = [
     ['Why Learn Piano?', 'Piano trains timing, pattern recognition, listening, and confidence. It is music plus problem-solving in a very honest machine.'],
@@ -2024,6 +2325,25 @@ function DashboardDetail({
       const cards = await scheduleRevisionLoop(appUser.user.id, itemId, dashboard.title)
       window.dispatchEvent(new CustomEvent('nexagen:revision-cards', { detail: cards }))
     }
+  }
+
+  if (!isUnlocked) {
+    return (
+      <article className="relative overflow-hidden rounded-[1.5rem] border border-amber-100 bg-white p-6 text-center shadow-xl shadow-slate-200/70">
+        <div className="mx-auto grid size-16 place-items-center rounded-2xl bg-amber-100 text-amber-700">
+          <LockKeyhole className="size-8" />
+        </div>
+        <p className="mt-5 text-sm font-bold uppercase tracking-[.16em] text-teal-700">Subscription access</p>
+        <h2 className="mt-2 text-3xl font-black">{dashboard.title}</h2>
+        <p className="mx-auto mt-3 max-w-xl leading-7 text-slate-600">
+          This dashboard now unlocks through Starter Pass or Pro Access. Payments are paused, so use the pricing section to activate a test subscription first.
+        </p>
+        <button className="mt-6 inline-flex items-center justify-center gap-2 rounded-full bg-slate-950 px-5 py-3 font-black text-white shadow-lg" onClick={onUnlock}>
+          <CreditCard className="size-5" />
+          View test access
+        </button>
+      </article>
+    )
   }
 
   if (isPianoDashboard) {
@@ -3585,10 +3905,21 @@ function QnaItem({
 function AuthModal({ onClose }: { onClose: () => void }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
 
   const submit = async (mode: 'signin' | 'signup') => {
+    if (!supabaseConfigured) {
+      setMessage('Supabase is not configured on this deployment yet. Add the Vercel environment variables and redeploy.')
+      return
+    }
+    if (mode === 'signup' && password !== confirmPassword) {
+      setMessage('Passwords do not match.')
+      return
+    }
     setBusy(true)
     setMessage('')
     const credentials = { email, password }
@@ -3607,11 +3938,29 @@ function AuthModal({ onClose }: { onClose: () => void }) {
 
   return (
     <Modal onClose={onClose}>
-      <h2 className="text-2xl font-black">Authentication</h2>
-      <p className="mt-2 text-sm leading-6 text-slate-500">Use email and password. Supabase handles the account securely.</p>
+      <div className="flex items-start gap-4">
+        <div className="grid size-14 place-items-center rounded-2xl bg-gradient-to-br from-teal-500 to-indigo-600 text-white shadow-lg">
+          <ShieldCheck className="size-7" />
+        </div>
+        <div>
+          <h2 className="text-2xl font-black">Welcome to NexaGen</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-500">Create an account or sign in to save progress and test subscriptions.</p>
+        </div>
+      </div>
       <div className="mt-6 space-y-3">
         <input className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-teal-400" onChange={(event) => setEmail(event.target.value)} placeholder="you@gmail.com" value={email} />
-        <input className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-teal-400" onChange={(event) => setPassword(event.target.value)} placeholder="Password" type="password" value={password} />
+        <label className="flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-3 focus-within:border-teal-400">
+          <input className="min-w-0 flex-1 outline-none" onChange={(event) => setPassword(event.target.value)} placeholder="Password" type={showPassword ? 'text' : 'password'} value={password} />
+          <button aria-label={showPassword ? 'Hide password' : 'Show password'} className="text-slate-500" onClick={() => setShowPassword((value) => !value)} type="button">
+            {showPassword ? <EyeOff className="size-5" /> : <Eye className="size-5" />}
+          </button>
+        </label>
+        <label className="flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-3 focus-within:border-teal-400">
+          <input className="min-w-0 flex-1 outline-none" onChange={(event) => setConfirmPassword(event.target.value)} placeholder="Confirm password" type={showConfirmPassword ? 'text' : 'password'} value={confirmPassword} />
+          <button aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'} className="text-slate-500" onClick={() => setShowConfirmPassword((value) => !value)} type="button">
+            {showConfirmPassword ? <EyeOff className="size-5" /> : <Eye className="size-5" />}
+          </button>
+        </label>
       </div>
       {message && <p className="mt-4 rounded-2xl bg-slate-50 p-3 text-sm text-slate-600">{message}</p>}
       <div className="mt-6 grid gap-3 sm:grid-cols-2">
@@ -3629,48 +3978,31 @@ function AuthModal({ onClose }: { onClose: () => void }) {
 function UnlockModal({
   dashboard,
   onClose,
-  onRefresh,
   userId,
 }: {
   dashboard: Dashboard
   onClose: () => void
-  onRefresh: () => Promise<void>
   userId?: string
 }) {
-  const [phone, setPhone] = useState('')
-  const [state, setState] = useState<PaymentState>('idle')
   const [message, setMessage] = useState('')
 
-  const pay = async () => {
+  const explain = () => {
     if (!userId) {
-      setState('failed')
-      setMessage('Sign in before unlocking paid dashboards.')
+      setMessage('Sign in first, then choose a test subscription from the pricing section.')
       return
     }
-
-    setState('pending')
-    setMessage('Sending STK Push to your phone.')
-    try {
-      const result = await createPayment({ user_id: userId, dashboard_id: dashboard.id, phone_number: phone })
-      setState('success')
-      setMessage(result.message ?? 'Payment request created. The dashboard unlocks after IntaSend confirms the transaction.')
-      await onRefresh()
-    } catch (error) {
-      setState('failed')
-      setMessage(error instanceof Error ? error.message : 'Payment failed to start.')
-    }
+    setMessage('Payment is intentionally paused. Use the Starter or Pro test buttons to verify the SaaS flow before IntaSend integration.')
   }
 
   return (
     <Modal onClose={onClose}>
-      <h2 className="text-2xl font-black">Unlock {dashboard.title}</h2>
-      <p className="mt-2 leading-6 text-slate-500">Enter an M-Pesa number in 2547XXXXXXXX format. Unlocking is finalized only by the webhook.</p>
-      <input className="mt-6 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-teal-400" onChange={(event) => setPhone(event.target.value)} placeholder="2547XXXXXXXX" value={phone} />
-      <button className="mt-5 w-full rounded-full bg-slate-950 px-5 py-3 font-bold text-white disabled:opacity-60" disabled={state === 'pending'} onClick={pay}>
-        {state === 'pending' ? 'Waiting for STK Push' : `Unlock for KES ${dashboard.price}`}
+      <h2 className="text-2xl font-black">Subscription required</h2>
+      <p className="mt-2 leading-6 text-slate-500">{dashboard.title} is controlled by the new monthly SaaS access model.</p>
+      <button className="mt-5 w-full rounded-full bg-slate-950 px-5 py-3 font-bold text-white" onClick={explain}>
+        Test via pricing plans
       </button>
       {message && (
-        <p className={`mt-4 rounded-2xl p-3 text-sm ${state === 'failed' ? 'bg-red-50 text-red-700' : 'bg-teal-50 text-teal-800'}`}>
+        <p className="mt-4 rounded-2xl bg-teal-50 p-3 text-sm font-bold text-teal-800">
           {message}
         </p>
       )}

@@ -41,6 +41,27 @@ button:disabled,
   cursor: not-allowed;
 }
 
+.ticker-track {
+  width: max-content;
+  padding-left: 100%;
+  animation: nexagen-ticker 24s linear infinite;
+  will-change: transform;
+}
+
+.ticker-bar:hover .ticker-track {
+  animation-play-state: paused;
+}
+
+@keyframes nexagen-ticker {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(-100%);
+  }
+}
+
 @layer components {
   .glass {
     @apply bg-white/70 backdrop-blur-md border border-white/20 shadow-lg;

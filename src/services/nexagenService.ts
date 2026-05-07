@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase'
+import { supabase, supabaseConfigured } from '../lib/supabase'
 import { fallbackContent, fallbackDashboards, fallbackSubtopics } from '../data/nexagenContent'
 import type { ContentItem, Dashboard, SkillLevel, Subtopic } from '../types/nexagen'
 
@@ -33,6 +33,81 @@ export type ActivityAction =
   | 'programming_level_set'
   | 'programming_question_attempted'
   | 'programming_question_completed'
+
+export type SubscriptionPlan = 'starter' | 'pro'
+
+export type UserSubscription = {
+  id: string
+  user_id: string
+  plan: SubscriptionPlan
+  dashboards_access: string[]
+  expires_at: string
+  created_at: string
+}
+
+export async function getActiveSubscription(userId: string): Promise<UserSubscription | null> {
+  const { data, error } = await supabase
+    .from('subscriptions')
+    .select('*')
+    .eq('user_id', userId)
+    .gt('expires_at', new Date().toISOString())
+    .order('expires_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error) return null
+  return data as UserSubscription | null
+}
+
+export async function activateTestSubscription(payload: {
+  userId: string
+  plan: SubscriptionPlan
+  dashboardsAccess: string[]
+}): Promise<UserSubscription> {
+  if (!supabaseConfigured) throw new Error('Supabase is not configured on this deployment yet.')
+  const expiresAt = new Date()
+  expiresAt.setMonth(expiresAt.getMonth() + 1)
+
+  const { data, error } = await supabase
+    .from('subscriptions')
+    .insert({
+      user_id: payload.userId,
+      plan: payload.plan,
+      dashboards_access: payload.dashboardsAccess,
+      expires_at: expiresAt.toISOString(),
+    })
+    .select('*')
+    .single()
+
+  if (error) throw error
+  return data as UserSubscription
+}
+
+export async function subscribeNewsletter(email: string): Promise<void> {
+  const normalizedEmail = email.trim().toLowerCase()
+  if (!normalizedEmail) throw new Error('Enter your email first.')
+  if (!supabaseConfigured) throw new Error('Supabase is not configured on this deployment yet.')
+
+  const { error } = await supabase.from('newsletter_subscribers').upsert(
+    { email: normalizedEmail },
+    { onConflict: 'email' },
+  )
+  if (error) throw error
+}
+
+export async function submitRating(payload: {
+  userId?: string
+  rating: number
+  feedback?: string
+}): Promise<void> {
+  if (!supabaseConfigured) throw new Error('Supabase is not configured on this deployment yet.')
+  const { error } = await supabase.from('ratings').insert({
+    user_id: payload.userId ?? null,
+    rating: payload.rating,
+    feedback: payload.feedback?.trim() || null,
+  })
+  if (error) throw error
+}
 
 export async function getProgrammingLevel(userId: string): Promise<SkillLevel | null> {
   const local = localStorage.getItem('nexagen:programming-level') as SkillLevel | null
