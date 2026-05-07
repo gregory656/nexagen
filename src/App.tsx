@@ -868,10 +868,6 @@ function LandingShell(props: LandingShellProps) {
       <DailyChallenge appUser={appUser} onOpenDashboard={openDashboardWorkspace} dashboards={dashboards} />
       <ProgrammingValueSection />
       <SaasPricingSection
-        appUser={appUser}
-        dashboards={dashboards}
-        onAuthOpen={onAuthOpen}
-        onSubscriptionChange={onSubscriptionChange}
         subscription={subscription}
       />
       <SongPracticeLibrary />
@@ -2038,48 +2034,8 @@ function SongPracticeLibrary() {
   )
 }
 
-function SaasPricingSection({
-  appUser,
-  dashboards,
-  onAuthOpen,
-  onSubscriptionChange,
-  subscription,
-}: {
-  appUser: AppUser
-  dashboards: Dashboard[]
-  onAuthOpen: () => void
-  onSubscriptionChange: (subscription: UserSubscription | null) => void
-  subscription: UserSubscription | null
-}) {
-  const [starterDashboard, setStarterDashboard] = useState('piano-12-keys')
-  const [message, setMessage] = useState('')
-  const [busyPlan, setBusyPlan] = useState<SubscriptionPlan | null>(null)
-  const starterOptions = dashboards
-    .filter((dashboard) => availableDashboardSlugs.includes(dashboardAccessKey(dashboard)))
-    .map((dashboard) => ({ label: dashboard.title, value: dashboardAccessKey(dashboard) }))
-  const activePlan = subscription ? `${subscription.plan.toUpperCase()} active until ${new Date(subscription.expires_at).toLocaleDateString()}` : 'Test a plan before payments go live'
-
-  const activate = async (plan: SubscriptionPlan) => {
-    if (!appUser.user) {
-      onAuthOpen()
-      return
-    }
-    setBusyPlan(plan)
-    setMessage('')
-    try {
-      const saved = await activateTestSubscription({
-        userId: appUser.user.id,
-        plan,
-        dashboardsAccess: plan === 'pro' ? ['all'] : [starterDashboard],
-      })
-      onSubscriptionChange(saved)
-      setMessage(`${plan === 'pro' ? 'Pro Access' : 'Starter Pass'} is active in test mode. Payment integration can come later.`)
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Could not activate subscription.')
-    } finally {
-      setBusyPlan(null)
-    }
-  }
+function SaasPricingSection({ subscription }: { subscription: UserSubscription | null }) {
+  const activePlan = subscription ? `${subscription.plan.toUpperCase()} active until ${new Date(subscription.expires_at).toLocaleDateString()}` : 'Choose a plan before opening a dashboard'
 
   const plans = [
     {
@@ -2124,13 +2080,6 @@ function SaasPricingSection({
             </div>
             <h3 className="text-2xl font-black">{item.name}</h3>
             <p className="mt-2 text-4xl font-black">{item.price}<span className="text-base font-bold text-slate-500"> / month</span></p>
-            {item.plan === 'starter' && (
-              <select className="mt-5 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 font-bold outline-none focus:border-teal-400" onChange={(event) => setStarterDashboard(event.target.value)} value={starterDashboard}>
-                {(starterOptions.length ? starterOptions : [{ label: 'Piano Dashboard', value: 'piano-12-keys' }, { label: 'Programming Dashboard', value: 'programming' }]).map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
-            )}
             <div className="mt-5 grid gap-3">
               {item.features.map((feature) => (
                 <span className="flex items-center gap-3 text-sm font-bold text-slate-700" key={feature}>
@@ -2139,13 +2088,9 @@ function SaasPricingSection({
                 </span>
               ))}
             </div>
-            <button className="mt-6 w-full rounded-full bg-slate-950 px-5 py-3 font-black text-white shadow-lg disabled:opacity-60" disabled={busyPlan === item.plan} onClick={() => activate(item.plan)}>
-              {busyPlan === item.plan ? 'Activating...' : appUser.user ? `Test ${item.name}` : 'Sign in to test'}
-            </button>
           </div>
         )})}
       </div>
-      {message && <p className="mt-5 rounded-2xl bg-teal-50 p-4 text-sm font-bold text-teal-800">{message}</p>}
     </section>
   )
 }
