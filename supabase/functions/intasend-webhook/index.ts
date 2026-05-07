@@ -32,37 +32,56 @@ Deno.serve(async (request) => {
     return json({ received: true, ignored: status || 'UNKNOWN' })
   }
 
-  const [userId, dashboardId] = apiRef.split(':')
   const supabase = createClient(supabaseUrl, serviceRoleKey)
-  const paymentLookup = !userId || !dashboardId
-    ? await supabase.from('payments').select('user_id,dashboard_id').eq('transaction_id', apiRef).single()
-    : { data: { user_id: userId, dashboard_id: dashboardId }, error: null }
+  const paymentLookup = await supabase
+    .from('payment_logs')
+    .select('user_id,plan_name,amount,status')
+    .eq('transaction_id', apiRef)
+    .single()
 
   if (paymentLookup.error || !paymentLookup.data) return json({ error: 'Webhook missing payment metadata' }, 400)
 
   const resolvedUserId = paymentLookup.data.user_id
-  const resolvedDashboardId = paymentLookup.data.dashboard_id
+  const planName = paymentLookup.data.plan_name === 'pro' ? 'pro' : 'starter'
+  const profileLookup = await supabase.from('user_profiles').select('selected_dashboard').eq('id', resolvedUserId).maybeSingle()
+  const dashboardAccess = planName === 'pro' ? ['all'] : [profileLookup.data?.selected_dashboard ?? 'piano-12-keys']
+  const languageAccess = planName === 'pro' ? ['all'] : ['javascript']
+  const expiresAt = new Date()
+  expiresAt.setMonth(expiresAt.getMonth() + 1)
 
-  await supabase.from('payments').upsert(
+  await supabase.from('payment_logs').upsert(
     {
       user_id: resolvedUserId,
-      dashboard_id: resolvedDashboardId,
+      plan_name: planName,
       amount,
-      status: 'COMPLETE',
+      status: 'complete',
       transaction_id: apiRef || transactionId,
     },
     { onConflict: 'transaction_id' },
   )
 
-  await supabase.from('user_unlocks').upsert(
+  await supabase.from('subscriptions').insert(
     {
       user_id: resolvedUserId,
-      dashboard_id: resolvedDashboardId,
+      plan_name: planName,
+      dashboard_access: dashboardAccess,
+      language_access: languageAccess,
+      status: 'active',
+      amount,
+      expires_at: expiresAt.toISOString(),
     },
-    { onConflict: 'user_id,dashboard_id' },
   )
 
-  return json({ received: true, unlocked: true })
+  await supabase.from('user_profiles').upsert(
+    {
+      id: resolvedUserId,
+      current_plan: planName,
+      selected_dashboard: dashboardAccess[0],
+    },
+    { onConflict: 'id' },
+  )
+
+  return json({ received: true, unlocked: true, plan: planName })
 })
 
 async function verifyHmac(rawBody: string, challenge: string, signature: string | null) {

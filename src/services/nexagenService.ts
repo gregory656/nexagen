@@ -41,7 +41,21 @@ export type UserSubscription = {
   user_id: string
   plan: SubscriptionPlan
   dashboards_access: string[]
+  language_access: string[]
+  status: string
+  amount: number
   expires_at: string
+  created_at: string
+}
+
+export type UserProfile = {
+  id: string
+  username: string | null
+  current_plan: string
+  selected_dashboard: string | null
+  selected_trial_language: string | null
+  free_trial_used: boolean
+  device_fingerprint: string | null
   created_at: string
 }
 
@@ -50,19 +64,22 @@ export async function getActiveSubscription(userId: string): Promise<UserSubscri
     .from('subscriptions')
     .select('*')
     .eq('user_id', userId)
+    .eq('status', 'active')
     .gt('expires_at', new Date().toISOString())
     .order('expires_at', { ascending: false })
     .limit(1)
     .maybeSingle()
 
   if (error) return null
-  return data as UserSubscription | null
+  return normalizeSubscription(data)
 }
 
 export async function activateTestSubscription(payload: {
   userId: string
   plan: SubscriptionPlan
   dashboardsAccess: string[]
+  languageAccess?: string[]
+  trial?: boolean
 }): Promise<UserSubscription> {
   if (!supabaseConfigured) throw new Error('Supabase is not configured on this deployment yet.')
   const expiresAt = new Date()
@@ -72,15 +89,84 @@ export async function activateTestSubscription(payload: {
     .from('subscriptions')
     .insert({
       user_id: payload.userId,
-      plan: payload.plan,
-      dashboards_access: payload.dashboardsAccess,
+      plan_name: payload.plan,
+      dashboard_access: payload.dashboardsAccess,
+      language_access: payload.languageAccess ?? (payload.plan === 'pro' ? ['all'] : ['javascript']),
+      status: 'active',
+      amount: payload.trial ? 0 : payload.plan === 'pro' ? 150 : 100,
       expires_at: expiresAt.toISOString(),
     })
     .select('*')
     .single()
 
   if (error) throw error
-  return data as UserSubscription
+  await supabase.from('user_profiles').upsert(
+    {
+      id: payload.userId,
+      current_plan: payload.trial ? `${payload.plan}_trial` : payload.plan,
+      selected_dashboard: payload.dashboardsAccess[0] ?? null,
+      selected_trial_language: payload.languageAccess?.[0] ?? null,
+      free_trial_used: payload.trial ? true : undefined,
+      device_fingerprint: payload.trial ? getDeviceFingerprint() : undefined,
+    },
+    { onConflict: 'id' },
+  )
+  return normalizeSubscription(data) as UserSubscription
+}
+
+export async function startFreeTrial(payload: {
+  userId: string
+  plan: SubscriptionPlan
+  dashboard: string
+  language: string
+}): Promise<UserSubscription> {
+  if (!supabaseConfigured) throw new Error('Supabase is not configured on this deployment yet.')
+  const deviceFingerprint = getDeviceFingerprint()
+  const existing = await supabase.from('free_trials').select('id').eq('device_fingerprint', deviceFingerprint).maybeSingle()
+  if (existing.data?.id) throw new Error('This device has already used a free trial.')
+
+  const expiresAt = new Date()
+  expiresAt.setMonth(expiresAt.getMonth() + 1)
+  const { error } = await supabase.from('free_trials').insert({
+    device_fingerprint: deviceFingerprint,
+    user_id: payload.userId,
+    language: payload.language,
+    dashboard: payload.dashboard,
+    expires_at: expiresAt.toISOString(),
+  })
+  if (error) throw error
+
+  return activateTestSubscription({
+    userId: payload.userId,
+    plan: payload.plan,
+    dashboardsAccess: [payload.dashboard],
+    languageAccess: [payload.language],
+    trial: true,
+  })
+}
+
+export async function getUserProfile(userId: string): Promise<UserProfile | null> {
+  const { data, error } = await supabase.from('user_profiles').select('*').eq('id', userId).maybeSingle()
+  if (error) return null
+  return data as UserProfile | null
+}
+
+export async function saveUserProfile(payload: {
+  userId: string
+  username?: string
+  selectedDashboard?: string | null
+  selectedTrialLanguage?: string | null
+}): Promise<void> {
+  const { error } = await supabase.from('user_profiles').upsert(
+    {
+      id: payload.userId,
+      username: payload.username?.trim() || null,
+      selected_dashboard: payload.selectedDashboard ?? undefined,
+      selected_trial_language: payload.selectedTrialLanguage ?? undefined,
+    },
+    { onConflict: 'id' },
+  )
+  if (error) throw error
 }
 
 export async function subscribeNewsletter(email: string): Promise<void> {
@@ -307,7 +393,8 @@ export async function trackUserActivity(payload: {
 
 export async function createPayment(payload: {
   user_id: string
-  dashboard_id: string
+  plan_name: SubscriptionPlan
+  selected_dashboard?: string
   phone_number: string
 }): Promise<UnlockResponse> {
   const { data, error } = await supabase.functions.invoke<UnlockResponse>('create-payment', {
@@ -330,6 +417,37 @@ export async function createPayment(payload: {
     throw new Error(withDetails(data.error, data.details))
   }
   return data ?? { message: 'Payment initiated' }
+}
+
+function normalizeSubscription(row: Record<string, unknown> | null): UserSubscription | null {
+  if (!row) return null
+  return {
+    id: String(row.id),
+    user_id: String(row.user_id),
+    plan: (row.plan_name ?? row.plan ?? 'starter') as SubscriptionPlan,
+    dashboards_access: (row.dashboard_access ?? row.dashboards_access ?? []) as string[],
+    language_access: (row.language_access ?? []) as string[],
+    status: String(row.status ?? 'active'),
+    amount: Number(row.amount ?? 0),
+    expires_at: String(row.expires_at),
+    created_at: String(row.created_at),
+  }
+}
+
+function getDeviceFingerprint() {
+  const key = 'nexagen:device-fingerprint'
+  const existing = localStorage.getItem(key)
+  if (existing) return existing
+  const fingerprint = [
+    navigator.userAgent,
+    navigator.language,
+    screen.width,
+    screen.height,
+    Intl.DateTimeFormat().resolvedOptions().timeZone,
+    crypto.randomUUID(),
+  ].join('|')
+  localStorage.setItem(key, fingerprint)
+  return fingerprint
 }
 
 function withDetails(error: string, details: unknown) {

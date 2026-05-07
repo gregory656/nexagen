@@ -2,7 +2,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 type PaymentRequest = {
   user_id?: string
-  dashboard_id?: string
+  plan_name?: 'starter' | 'pro'
+  selected_dashboard?: string
   phone_number?: string
 }
 
@@ -24,8 +25,8 @@ Deno.serve(async (request) => {
   }
 
   const body = (await request.json().catch(() => ({}))) as PaymentRequest
-  if (!body.user_id || !body.dashboard_id || !body.phone_number) {
-    return json({ error: 'user_id, dashboard_id, and phone_number are required' }, 400)
+  if (!body.user_id || !body.plan_name || !body.phone_number) {
+    return json({ error: 'user_id, plan_name, and phone_number are required' }, 400)
   }
 
   if (!/^2547\d{8}$/.test(body.phone_number)) {
@@ -41,18 +42,13 @@ Deno.serve(async (request) => {
     return json({ error: 'Unauthorized payment request' }, 401)
   }
 
-  const dashboardLookup = getDashboardLookup(body.dashboard_id)
-  const dashboardQuery = supabase.from('dashboards').select('id,title,price,is_locked')
-  const { data: dashboard, error: dashboardError } = dashboardLookup.kind === 'uuid'
-    ? await dashboardQuery.eq('id', dashboardLookup.value).single()
-    : await dashboardQuery.eq('title', dashboardLookup.value).single()
-
-  if (dashboardError || !dashboard) return json({ error: 'Dashboard not found' }, 404)
-  if (!dashboard.is_locked || dashboard.price <= 0) return json({ error: 'Dashboard is already free' }, 400)
+  const amount = body.plan_name === 'pro' ? 150 : 100
+  const dashboardAccess = body.plan_name === 'pro' ? ['all'] : [body.selected_dashboard ?? 'piano-12-keys']
+  const languageAccess = body.plan_name === 'pro' ? ['all'] : ['javascript']
 
   const apiRef = `nexagen-${crypto.randomUUID()}`
   const paymentPayload = {
-    amount: String(dashboard.price),
+    amount: String(amount),
     api_ref: apiRef,
     phone_number: body.phone_number,
   }
@@ -95,17 +91,28 @@ Deno.serve(async (request) => {
     )
   }
 
-  await supabase.from('payments').insert({
+  await supabase.from('payment_logs').insert({
     user_id: body.user_id,
-    dashboard_id: dashboard.id,
-    amount: dashboard.price,
-    status: 'PENDING',
+    plan_name: body.plan_name,
+    amount,
+    status: 'pending',
     transaction_id: apiRef,
   })
+
+  await supabase.from('user_profiles').upsert(
+    {
+      id: body.user_id,
+      current_plan: 'pending',
+      selected_dashboard: dashboardAccess[0],
+    },
+    { onConflict: 'id' },
+  )
 
   return json({
     message: 'STK Push sent. Unlock will complete after payment confirmation.',
     api_ref: apiRef,
+    dashboard_access: dashboardAccess,
+    language_access: languageAccess,
     invoice_id: paymentData.invoice_id,
     tracking_id: paymentData.tracking_id,
   })
@@ -116,22 +123,4 @@ function json(payload: unknown, status = 200) {
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     status,
   })
-}
-
-function getDashboardLookup(dashboardId: string) {
-  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-  if (uuidPattern.test(dashboardId)) return { kind: 'uuid' as const, value: dashboardId }
-
-  const fallbackTitles: Record<string, string> = {
-    'music-theory': 'Music Theory',
-    'piano-12-keys': 'Piano (12 Keys)',
-    'find-my-key-pitch': 'Find My Key & Pitch',
-    programming: 'Programming',
-    'operating-systems': 'Operating Systems',
-    'installing-troubleshooting': 'Installing & Troubleshooting',
-    'computer-basics': 'Computer Basics',
-    'powershell-commands': 'PowerShell Commands',
-  }
-
-  return { kind: 'title' as const, value: fallbackTitles[dashboardId] ?? dashboardId }
 }

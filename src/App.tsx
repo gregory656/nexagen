@@ -11,6 +11,7 @@ import {
   Compass,
   Coffee,
   CreditCard,
+  Crown,
   Download,
   Eye,
   EyeOff,
@@ -97,8 +98,12 @@ import {
   setUserLevel,
   TEST_MODE,
   activateTestSubscription,
+  createPayment,
   getActiveSubscription,
+  getUserProfile,
   trackUserActivity,
+  saveUserProfile,
+  startFreeTrial,
   unlockSubtopicForTest,
   subscribeNewsletter,
   submitRating,
@@ -640,16 +645,44 @@ function LandingShell(props: LandingShellProps) {
   } = props
   const [query, setQuery] = useState('')
   const [unlockTarget, setUnlockTarget] = useState<Dashboard | null>(null)
+  const [planTarget, setPlanTarget] = useState<Dashboard | null>(null)
+  const [comingSoonDashboard, setComingSoonDashboard] = useState<Dashboard | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [analyticsOpen, setAnalyticsOpen] = useState(false)
   const [focusedDashboardId, setFocusedDashboardId] = useState<string | null>(null)
   const [revisionCards, setRevisionCards] = useState<RevisionCard[]>([])
+  const [progressMessage, setProgressMessage] = useState('')
+  const [successMessage, setSuccessMessage] = useState('')
   const effectiveUnlocks = useMemo(() => buildEffectiveUnlocks(dashboards, unlocks, subscription), [dashboards, subscription, unlocks])
 
   const openDashboardWorkspace = (id: string) => {
+    const dashboard = dashboards.find((item) => item.id === id)
+    if (!dashboard) return
+    const accessKey = dashboardAccessKey(dashboard)
     onSelected(id)
+    if (!availableDashboardSlugs.includes(accessKey)) {
+      setComingSoonDashboard(dashboard)
+      return
+    }
+    if (!appUser.user) {
+      onAuthOpen()
+      return
+    }
+    if (!dashboardIsSubscriptionUnlocked(dashboard, subscription)) {
+      setPlanTarget(dashboard)
+      return
+    }
     setFocusedDashboardId(id)
     window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const saveProgress = () => {
+    if (!appUser.user) {
+      onAuthOpen()
+      return
+    }
+    setProgressMessage('Your progress is now being tracked. Visit Analytics Dashboard to monitor your learning.')
+    window.setTimeout(() => setProgressMessage(''), 5200)
   }
 
   const selectedContent = useMemo(() => {
@@ -769,6 +802,11 @@ function LandingShell(props: LandingShellProps) {
           setSidebarOpen(false)
         }}
         onClose={() => setSidebarOpen(false)}
+        onAccount={() => {
+          setAnalyticsOpen(false)
+          setSidebarOpen(false)
+          window.dispatchEvent(new CustomEvent('nexagen:open-account'))
+        }}
         onSelectDashboard={(id) => {
           openDashboardWorkspace(id)
           setSidebarOpen(false)
@@ -794,10 +832,11 @@ function LandingShell(props: LandingShellProps) {
               <a className="rounded-full bg-slate-950 px-6 py-3 font-bold text-white shadow-xl" href="#dashboards">
                 Explore dashboards
               </a>
-              <button className="rounded-full border border-slate-200 bg-white px-6 py-3 font-bold text-slate-800 shadow-sm" onClick={onAuthOpen}>
+              <button className="rounded-full border border-slate-200 bg-white px-6 py-3 font-bold text-slate-800 shadow-sm" onClick={saveProgress}>
                 Save progress
               </button>
             </div>
+            {progressMessage && <p className="mt-4 rounded-2xl bg-teal-50 p-4 text-sm font-black text-teal-800 shadow-sm">{progressMessage}</p>}
           </div>
           <div className="grid gap-4 sm:grid-cols-3">
             {visuals.map((src, index) => (
@@ -1023,6 +1062,28 @@ function LandingShell(props: LandingShellProps) {
             subtopics={subtopics}
           />
         )}
+        <AccountAutoModal appUser={appUser} dashboards={dashboards} subscription={subscription} onAuthOpen={onAuthOpen} onSubscriptionChange={onSubscriptionChange} />
+        {comingSoonDashboard && <ComingSoonModal dashboard={comingSoonDashboard} onClose={() => setComingSoonDashboard(null)} />}
+        {planTarget && (
+          <PlanSelectionModal
+            appUser={appUser}
+            dashboard={planTarget}
+            dashboards={dashboards}
+            onAuthOpen={onAuthOpen}
+            onClose={() => setPlanTarget(null)}
+            onOpenDashboard={(dashboardId, message) => {
+              setPlanTarget(null)
+              setSuccessMessage(message)
+              window.setTimeout(() => {
+                setSuccessMessage('')
+                setFocusedDashboardId(dashboardId)
+                window.scrollTo({ top: 0, behavior: 'smooth' })
+              }, 1500)
+            }}
+            onSubscriptionChange={onSubscriptionChange}
+          />
+        )}
+        {successMessage && <SuccessOverlay message={successMessage} />}
         {!!revisionCards.length && <SessionLockIn cards={revisionCards} onClose={() => setRevisionCards([])} />}
         {unlockTarget && (
           <UnlockModal
@@ -1133,6 +1194,7 @@ function ProfileSidebar({
   completed,
   dashboards,
   onAnalytics,
+  onAccount,
   onClose,
   onSelectDashboard,
   open,
@@ -1143,6 +1205,7 @@ function ProfileSidebar({
   completed: string[]
   dashboards: Dashboard[]
   onAnalytics: () => void
+  onAccount: () => void
   onClose: () => void
   onSelectDashboard: (id: string) => void
   open: boolean
@@ -1188,6 +1251,17 @@ function ProfileSidebar({
                 Analytics Dashboard
               </span>
               <span>{completed.length}</span>
+            </button>
+
+            <button
+              className="mt-3 flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-4 text-left font-black text-slate-800"
+              onClick={onAccount}
+            >
+              <span className="inline-flex items-center gap-2">
+                <ShieldCheck className="size-5" />
+                My Account
+              </span>
+              <ChevronDown className="size-4 -rotate-90" />
             </button>
 
             <div className="mt-6 min-h-0 flex-1 overflow-auto pr-1">
@@ -1449,19 +1523,35 @@ function InfoPanel({ action, onClick, title, value }: { action?: string; onClick
 
 function DailyChallenge({ appUser, dashboards, onOpenDashboard }: { appUser: AppUser; dashboards: Dashboard[]; onOpenDashboard: (id: string) => void }) {
   const [claimed, setClaimed] = useState(localStorage.getItem('nexagen:daily-challenge') === new Date().toDateString())
+  const [coins, setCoins] = useState<Array<{ id: number; left: number }>>([])
   const piano = dashboards.find((item) => item.title.toLowerCase().includes('piano'))
   const programming = dashboards.find((item) => item.title.toLowerCase().includes('programming'))
 
   const claim = async () => {
     localStorage.setItem('nexagen:daily-challenge', new Date().toDateString())
     setClaimed(true)
+    setCoins(Array.from({ length: 9 }, (_, index) => ({ id: Date.now() + index, left: 16 + index * 8 })))
+    playCoinSound()
+    window.setTimeout(() => setCoins([]), 1100)
     await awardXp(appUser.user?.id, 35, 'daily challenge')
     await grantBadge(appUser.user?.id, 'Consistent Learner')
   }
 
   return (
     <section className="mx-auto max-w-7xl px-4 py-8">
-      <div className="rounded-[1.5rem] border border-teal-100 bg-teal-50 p-5 md:p-7">
+      <div className="relative overflow-hidden rounded-[1.5rem] border border-teal-100 bg-teal-50 p-5 md:p-7">
+        {coins.map((coin) => (
+          <motion.span
+            animate={{ opacity: [0, 1, 0], y: [20, -65, -95], scale: [0.7, 1, 0.85] }}
+            className="pointer-events-none absolute bottom-6 grid size-6 place-items-center rounded-full bg-gradient-to-br from-amber-200 to-amber-500 text-xs font-black text-amber-950 shadow-lg"
+            initial={{ opacity: 0, y: 20 }}
+            key={coin.id}
+            style={{ left: `${coin.left}%` }}
+            transition={{ duration: 1, ease: 'easeOut' }}
+          >
+            +
+          </motion.span>
+        ))}
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-sm font-bold uppercase tracking-[.16em] text-teal-700">Daily Challenge</p>
@@ -1469,9 +1559,9 @@ function DailyChallenge({ appUser, dashboards, onOpenDashboard }: { appUser: App
             <p className="mt-3 leading-7 text-slate-700">Play a C major chord progression, then solve one timed programming prompt. Bonus XP when both are done.</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            {piano && <button className="rounded-full bg-white px-4 py-2 text-sm font-bold text-slate-800" onClick={() => onOpenDashboard(piano.id)}>Piano task</button>}
-            {programming && <button className="rounded-full bg-white px-4 py-2 text-sm font-bold text-slate-800" onClick={() => onOpenDashboard(programming.id)}>Code task</button>}
-            <button className="inline-flex items-center gap-2 rounded-full bg-slate-950 px-4 py-2 text-sm font-bold text-white disabled:opacity-60" disabled={claimed} onClick={claim}>
+            {piano && <button className="rounded-full bg-emerald-600 px-4 py-2 text-sm font-bold text-white shadow-lg shadow-emerald-200" onClick={() => onOpenDashboard(piano.id)}>Piano Task</button>}
+            {programming && <button className="rounded-full bg-emerald-600 px-4 py-2 text-sm font-bold text-white shadow-lg shadow-emerald-200" onClick={() => onOpenDashboard(programming.id)}>Code Task</button>}
+            <button className="inline-flex animate-pulse items-center gap-2 rounded-full bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500 px-4 py-2 text-sm font-black text-amber-950 shadow-xl shadow-amber-300/60 disabled:animate-none disabled:opacity-70" disabled={claimed} onClick={claim}>
               <Flame className="size-4" />
               {claimed ? 'XP claimed' : '+35 XP'}
             </button>
@@ -1480,6 +1570,25 @@ function DailyChallenge({ appUser, dashboards, onOpenDashboard }: { appUser: App
       </div>
     </section>
   )
+}
+
+function playCoinSound() {
+  const AudioContextClass = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+  if (!AudioContextClass) return
+  const context = new AudioContextClass()
+  ;[880, 1174, 1568].forEach((frequency, index) => {
+    const oscillator = context.createOscillator()
+    const gain = context.createGain()
+    oscillator.type = 'triangle'
+    oscillator.frequency.value = frequency
+    gain.gain.setValueAtTime(0.0001, context.currentTime + index * 0.06)
+    gain.gain.exponentialRampToValueAtTime(0.18, context.currentTime + index * 0.06 + 0.01)
+    gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + index * 0.06 + 0.16)
+    oscillator.connect(gain)
+    gain.connect(context.destination)
+    oscillator.start(context.currentTime + index * 0.06)
+    oscillator.stop(context.currentTime + index * 0.06 + 0.18)
+  })
 }
 
 function FloatingLearningAssistant({ context }: { context: Parameters<typeof askLearningAssistant>[1] }) {
@@ -1977,14 +2086,18 @@ function SaasPricingSection({
       plan: 'starter' as const,
       name: 'Starter Pass',
       price: 'KES 100',
-      accent: 'from-teal-600 to-cyan-500',
+      accent: 'from-slate-300 via-slate-100 to-slate-500',
+      icon: Medal,
+      iconClass: 'text-slate-800',
       features: ['Access to 1 dashboard of choice', 'Full Q&A content', 'Practice environment', 'Progress tracking', 'Monthly new questions'],
     },
     {
       plan: 'pro' as const,
       name: 'Pro Access',
       price: 'KES 150',
-      accent: 'from-indigo-600 to-teal-500',
+      accent: 'from-amber-300 via-yellow-400 to-amber-600',
+      icon: Crown,
+      iconClass: 'text-amber-950',
       features: ['Access to all available dashboards', 'Unlimited Q&A', 'Full coding IDE access', 'Full piano practice environment', 'Priority access to new content', 'Monthly new challenges'],
     },
   ]
@@ -2001,11 +2114,13 @@ function SaasPricingSection({
       </div>
 
       <div className="grid gap-5 lg:grid-cols-2">
-        {plans.map((item) => (
+        {plans.map((item) => {
+          const PlanIcon = item.icon
+          return (
           <div className="relative overflow-hidden rounded-[1.5rem] border border-white bg-white p-6 shadow-xl shadow-slate-200/80" key={item.name}>
             {item.plan === 'pro' && <span className="absolute right-5 top-5 rounded-full bg-amber-100 px-3 py-1 text-xs font-black text-amber-800">Best Value</span>}
             <div className={`mb-5 grid size-14 place-items-center rounded-2xl bg-gradient-to-br ${item.accent} text-white shadow-lg`}>
-              <CreditCard className="size-6" />
+              <PlanIcon className={`size-7 ${item.iconClass}`} />
             </div>
             <h3 className="text-2xl font-black">{item.name}</h3>
             <p className="mt-2 text-4xl font-black">{item.price}<span className="text-base font-bold text-slate-500"> / month</span></p>
@@ -2028,7 +2143,7 @@ function SaasPricingSection({
               {busyPlan === item.plan ? 'Activating...' : appUser.user ? `Test ${item.name}` : 'Sign in to test'}
             </button>
           </div>
-        ))}
+        )})}
       </div>
       {message && <p className="mt-5 rounded-2xl bg-teal-50 p-4 text-sm font-bold text-teal-800">{message}</p>}
     </section>
@@ -3699,6 +3814,10 @@ function FindYourSong() {
   const [genre, setGenre] = useState('Gospel')
   const [result, setResult] = useState<SongProgression | null>(songProgressions[0])
   const [message, setMessage] = useState('Curated harmony dataset ready. Spotify/harmony API adapter can replace this lookup when keys are configured.')
+  const [audioUrl, setAudioUrl] = useState('')
+  const [audioName, setAudioName] = useState('')
+  const [audioMessage, setAudioMessage] = useState('')
+  const audioRef = useRef<HTMLAudioElement | null>(null)
 
   const search = async () => {
     if (!title.trim()) {
@@ -3739,6 +3858,43 @@ function FindYourSong() {
     }).catch(() => undefined)
   }
 
+  const importMp3 = async (file: File | undefined) => {
+    if (!file) return
+    if (!file.name.toLowerCase().endsWith('.mp3')) {
+      setAudioMessage('Please upload an .mp3 file.')
+      return
+    }
+    if (audioUrl) URL.revokeObjectURL(audioUrl)
+    const nextUrl = URL.createObjectURL(file)
+    setAudioUrl(nextUrl)
+    setAudioName(file.name)
+    setAudioMessage('Analyzing the first 10 seconds...')
+    try {
+      const analysis = await analyzeMp3Key(file)
+      const progression = analysis.mode === 'minor' ? ['i', 'VI', 'III', 'VII'] : ['I', 'V', 'vi', 'IV']
+      const nextResult: SongProgression = {
+        title: file.name.replace(/\.mp3$/i, ''),
+        artist: 'Imported MP3',
+        genre: 'Audio import',
+        key: analysis.key,
+        scale: analysis.scale,
+        progression,
+        confidence: analysis.confidence,
+        notes: progression.flatMap((symbol) => romanToNotes(symbol)),
+        chords: progression.map((symbol) => romanToChord(symbol)),
+      }
+      setResult(nextResult)
+      setMessage(
+        analysis.confidence < 58
+          ? 'We couldn’t confidently detect the key. Try another section of the song.'
+          : 'Imported MP3 analyzed from the first 10 seconds.',
+      )
+      setAudioMessage(`Key to play from: ${analysis.key}. ${analysis.summary}`)
+    } catch {
+      setAudioMessage('We couldn’t confidently detect the key. Try another section of the song.')
+    }
+  }
+
   return (
     <section className="mt-5 rounded-2xl border border-slate-100 bg-white p-4">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -3759,6 +3915,44 @@ function FindYourSong() {
           <Search className="size-4" />
           Search
         </button>
+      </div>
+
+      <div className="mt-4 rounded-2xl border border-amber-100 bg-amber-50 p-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-sm font-black text-amber-800">Import Your Music (.mp3)</p>
+            <p className="mt-1 text-sm font-semibold text-slate-600">{audioMessage || 'Upload an MP3 to detect key, pitch center, and a suggested progression.'}</p>
+          </div>
+          <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-full bg-slate-950 px-5 py-3 text-sm font-black text-white">
+            <Download className="size-4" />
+            Upload MP3
+            <input accept=".mp3,audio/mpeg" className="sr-only" onChange={(event) => void importMp3(event.target.files?.[0])} type="file" />
+          </label>
+        </div>
+        {audioUrl && (
+          <div className="mt-4 rounded-2xl bg-white p-3">
+            <p className="mb-2 text-sm font-black text-slate-700">{audioName}</p>
+            <audio className="hidden" ref={audioRef} src={audioUrl} />
+            <div className="flex flex-wrap gap-2">
+              <button className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-4 py-2 text-sm font-bold text-white" onClick={() => void audioRef.current?.play()}>
+                <Play className="size-4" />
+                Play
+              </button>
+              <button className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-4 py-2 text-sm font-bold text-slate-800" onClick={() => audioRef.current?.pause()}>
+                <Pause className="size-4" />
+                Pause
+              </button>
+              <button className="inline-flex items-center gap-2 rounded-full bg-slate-950 px-4 py-2 text-sm font-bold text-white" onClick={() => {
+                if (!audioRef.current) return
+                audioRef.current.pause()
+                audioRef.current.currentTime = 0
+              }}>
+                <X className="size-4" />
+                Stop
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {result && (
@@ -3801,6 +3995,44 @@ function FindYourSong() {
       )}
     </section>
   )
+}
+
+async function analyzeMp3Key(file: File) {
+  const AudioContextClass = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+  if (!AudioContextClass) throw new Error('Audio analysis unavailable.')
+  const context = new AudioContextClass()
+  const buffer = await context.decodeAudioData(await file.arrayBuffer())
+  const sampleRate = buffer.sampleRate
+  const length = Math.min(buffer.length, sampleRate * 10)
+  const channel = buffer.getChannelData(0).slice(0, length)
+  const chroma = new Array(12).fill(0)
+  const size = 4096
+  for (let offset = 0; offset + size < channel.length; offset += size) {
+    const segment = channel.slice(offset, offset + size)
+    const zeroCrossings = segment.reduce((count, value, index) => index && Math.sign(value) !== Math.sign(segment[index - 1]) ? count + 1 : count, 0)
+    const frequency = Math.max(55, Math.min(1760, (zeroCrossings * sampleRate) / (2 * size)))
+    const midi = Math.round(69 + 12 * Math.log2(frequency / 440))
+    chroma[((midi % 12) + 12) % 12] += segment.reduce((sum, value) => sum + Math.abs(value), 0)
+  }
+  const keys = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+  const majorProfile = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88]
+  const minorProfile = [6.33, 2.68, 3.52, 5.38, 2.6, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17]
+  const score = (profile: number[], root: number) => profile.reduce((sum, value, index) => sum + value * chroma[(index + root) % 12], 0)
+  const candidates = keys.flatMap((key, index) => [
+    { key: `${key} Major`, mode: 'major' as const, score: score(majorProfile, index), root: index },
+    { key: `${key} Minor`, mode: 'minor' as const, score: score(minorProfile, index), root: index },
+  ]).sort((a, b) => b.score - a.score)
+  const best = candidates[0]
+  const second = candidates[1]
+  const confidence = Math.max(35, Math.min(92, Math.round(((best.score - second.score) / Math.max(best.score, 1)) * 210 + 45)))
+  const scaleSteps = best.mode === 'minor' ? [0, 2, 3, 5, 7, 8, 10] : [0, 2, 4, 5, 7, 9, 11]
+  return {
+    key: best.key,
+    mode: best.mode,
+    confidence,
+    scale: scaleSteps.map((step) => keys[(best.root + step) % 12]).join(' '),
+    summary: `Detected Key: ${best.key}. Suggested song structure: intro, verse loop, chorus lift, return to home chord.`,
+  }
 }
 
 function buildGenreFallback(title: string, artist: string, genre: string): SongProgression {
@@ -4081,6 +4313,352 @@ function QnaItem({
   )
 }
 
+function PlanSelectionModal({
+  appUser,
+  dashboard,
+  dashboards,
+  onAuthOpen,
+  onClose,
+  onOpenDashboard,
+  onSubscriptionChange,
+}: {
+  appUser: AppUser
+  dashboard: Dashboard
+  dashboards: Dashboard[]
+  onAuthOpen: () => void
+  onClose: () => void
+  onOpenDashboard: (dashboardId: string, message: string) => void
+  onSubscriptionChange: (subscription: UserSubscription | null) => void
+}) {
+  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null)
+  const [selectedDashboard, setSelectedDashboard] = useState('')
+  const [language, setLanguage] = useState(programmingLanguages[0]?.name ?? 'JavaScript')
+  const [paymentPlan, setPaymentPlan] = useState<SubscriptionPlan | null>(null)
+  const [phone, setPhone] = useState('')
+  const [busy, setBusy] = useState('')
+  const [message, setMessage] = useState('')
+  const dashboardOptions = dashboards
+    .filter((item) => availableDashboardSlugs.includes(dashboardAccessKey(item)))
+    .map((item) => ({ id: item.id, label: item.title, value: dashboardAccessKey(item) }))
+  const programmingDashboardId = dashboardOptions.find((item) => item.value === 'programming')?.id ?? dashboard.id
+  const starterTargetDashboardId = dashboardOptions.find((item) => item.value === selectedDashboard)?.id ?? dashboard.id
+
+  const validateChoice = (plan: SubscriptionPlan) => {
+    if (plan === 'starter' && !selectedDashboard) {
+      setMessage('Choose one dashboard for Starter Pass first.')
+      return false
+    }
+    return true
+  }
+
+  const runTrial = async (plan: SubscriptionPlan) => {
+    if (!appUser.user) {
+      onAuthOpen()
+      return
+    }
+    if (!validateChoice(plan)) return
+    setBusy(`${plan}-trial`)
+    setMessage('')
+    try {
+      const saved = await startFreeTrial({
+        userId: appUser.user.id,
+        plan,
+        dashboard: plan === 'pro' ? 'all' : selectedDashboard,
+        language,
+      })
+      onSubscriptionChange(saved)
+      onOpenDashboard(plan === 'pro' ? programmingDashboardId : starterTargetDashboardId, 'Subscription successful. Redirecting you to your dashboard...')
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not start free trial.')
+    } finally {
+      setBusy('')
+    }
+  }
+
+  const unlock = async (plan: SubscriptionPlan) => {
+    if (!appUser.user) {
+      onAuthOpen()
+      return
+    }
+    if (!validateChoice(plan)) return
+    if (!phone.trim()) {
+      setMessage('Enter your M-Pesa phone number to continue.')
+      return
+    }
+    setBusy(`${plan}-unlock`)
+    setMessage('')
+    try {
+      await createPayment({
+        user_id: appUser.user.id,
+        plan_name: plan,
+        selected_dashboard: plan === 'pro' ? 'all' : selectedDashboard,
+        phone_number: phone,
+      })
+      setMessage('STK Push sent. Your dashboard unlocks after IntaSend confirms payment.')
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not start payment.')
+    } finally {
+      setBusy('')
+    }
+  }
+
+  return (
+    <Modal onClose={onClose}>
+      <div className="max-h-[calc(100dvh-9rem)] overflow-y-auto pr-1">
+      <p className="text-sm font-bold uppercase tracking-[.16em] text-teal-700">Choose your plan</p>
+      <h2 className="mt-2 text-2xl font-black">Plan selection is required before dashboards</h2>
+      <p className="mt-2 text-sm leading-6 text-slate-600">Plans last 1 month. New challenges added every month. Don’t miss out.</p>
+
+      <div className="mt-5 grid gap-3 md:grid-cols-2">
+        <select className="rounded-2xl border border-slate-200 px-4 py-3 font-bold outline-none focus:border-teal-400" onChange={(event) => setSelectedDashboard(event.target.value)} value={selectedDashboard}>
+          <option value="">Select one dashboard for Starter</option>
+          {dashboardOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        </select>
+        <select className="rounded-2xl border border-slate-200 px-4 py-3 font-bold outline-none focus:border-teal-400" onChange={(event) => setLanguage(event.target.value)} value={language}>
+          {programmingLanguages.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}
+        </select>
+      </div>
+
+      <div className="mt-5 grid gap-3">
+        <PlanMiniCard
+          busy={busy}
+          features={['Unlock 1 dashboard', '10 programming languages only', 'First 5 piano topics', 'Progress tracking', 'Monthly challenges']}
+          name="Starter Pass"
+          onSelect={() => {
+            setSelectedPlan('starter')
+            setPaymentPlan(null)
+            setMessage('')
+          }}
+          onTrial={() => void runTrial('starter')}
+          onUnlock={() => {
+            setSelectedPlan('starter')
+            if (validateChoice('starter')) setPaymentPlan('starter')
+          }}
+          price="KES 100/month"
+          selected={selectedPlan === 'starter'}
+          trialNote="Free trial unlocks 1 topic, one device, and one language for the month."
+        />
+        <PlanMiniCard
+          busy={busy}
+          features={['Unlock all dashboards', 'All programming languages', 'All piano topics', 'Unlimited challenges', 'Full coding IDE and piano engine']}
+          name="Pro Access"
+          onSelect={() => {
+            setSelectedPlan('pro')
+            setPaymentPlan(null)
+            setMessage('')
+          }}
+          onTrial={() => void runTrial('pro')}
+          onUnlock={() => {
+            setSelectedPlan('pro')
+            setPaymentPlan('pro')
+          }}
+          price="KES 150/month"
+          selected={selectedPlan === 'pro'}
+          trialNote="Save KES 50 with Pro Access."
+        />
+      </div>
+      {selectedPlan && (
+        <p className="mt-4 rounded-2xl bg-slate-50 p-3 text-sm font-bold text-slate-600">
+          {selectedPlan === 'starter'
+            ? 'Starter Pass needs one dashboard choice. Free trial starts without a phone number.'
+            : 'Pro Access unlocks every dashboard. Free trial starts without a phone number.'}
+        </p>
+      )}
+      {paymentPlan && (
+        <div className="mt-4 rounded-2xl border border-teal-100 bg-teal-50 p-4">
+          <p className="font-black text-teal-900">{paymentPlan === 'pro' ? 'Unlock Pro Access' : 'Unlock Starter Pass'}</p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_auto]">
+            <input className="rounded-2xl border border-teal-100 bg-white px-4 py-3 font-bold outline-none focus:border-teal-400" onChange={(event) => setPhone(event.target.value)} placeholder="M-Pesa phone number, e.g. 2547XXXXXXXX" value={phone} />
+            <button className="rounded-full bg-slate-950 px-5 py-3 font-black text-white disabled:opacity-60" disabled={busy === `${paymentPlan}-unlock`} onClick={() => void unlock(paymentPlan)}>
+              {busy === `${paymentPlan}-unlock` ? 'Sending STK...' : 'Send STK Push'}
+            </button>
+          </div>
+        </div>
+      )}
+      {message && <p className="mt-4 rounded-2xl bg-amber-50 p-3 text-sm font-bold text-amber-800">{message}</p>}
+      </div>
+    </Modal>
+  )
+}
+
+function PlanMiniCard({ busy, features, name, onSelect, onTrial, onUnlock, price, selected, trialNote }: {
+  busy: string
+  features: string[]
+  name: string
+  onSelect: () => void
+  onTrial: () => void
+  onUnlock: () => void
+  price: string
+  selected: boolean
+  trialNote: string
+}) {
+  const plan = name.toLowerCase().includes('pro') ? 'pro' : 'starter'
+  const Icon = plan === 'pro' ? Crown : Medal
+  const iconClasses = plan === 'pro'
+    ? 'bg-gradient-to-br from-amber-300 via-yellow-400 to-amber-600 text-amber-950'
+    : 'bg-gradient-to-br from-slate-300 via-slate-100 to-slate-500 text-slate-800'
+  return (
+    <div className={`rounded-2xl border p-4 transition ${selected ? 'border-teal-300 bg-teal-50 ring-4 ring-teal-100' : 'border-slate-100 bg-slate-50'}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <span className={`grid size-11 place-items-center rounded-xl shadow-sm ${iconClasses}`}>
+            <Icon className="size-6" />
+          </span>
+          <div>
+            <h3 className="font-black">{name}</h3>
+            <p className="text-sm font-bold text-slate-500">{price}</p>
+          </div>
+        </div>
+        <span className="rounded-full bg-white px-3 py-1 text-xs font-black text-teal-700">{selected ? 'Selected' : trialNote}</span>
+      </div>
+      <div className="mt-3 grid gap-1">
+        {features.map((feature) => <span className="text-xs font-bold text-slate-600" key={feature}>- {feature}</span>)}
+      </div>
+      <p className="mt-3 rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-600">{trialNote}</p>
+      <div className="mt-3 grid gap-2 sm:grid-cols-3">
+        <button className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-800" onClick={onSelect}>{selected ? 'Plan Selected' : 'Choose Plan'}</button>
+        <button className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-800 disabled:opacity-60" disabled={busy === `${plan}-trial`} onClick={() => {
+          onSelect()
+          onTrial()
+        }}>{busy === `${plan}-trial` ? 'Starting...' : 'Free Trial'}</button>
+        <button className="rounded-full bg-slate-950 px-4 py-2 text-sm font-black text-white disabled:opacity-60" disabled={busy === `${plan}-unlock`} onClick={onUnlock}>Unlock This Plan</button>
+      </div>
+    </div>
+  )
+}
+
+function ComingSoonModal({ dashboard, onClose }: { dashboard: Dashboard; onClose: () => void }) {
+  return (
+    <Modal onClose={onClose}>
+      <motion.div animate={{ y: [0, -8, 0] }} className="mx-auto grid size-24 place-items-center rounded-2xl bg-amber-100 text-amber-700" transition={{ duration: 2, repeat: Infinity }}>
+        <Terminal className="size-11" />
+      </motion.div>
+      <h2 className="mt-5 text-center text-2xl font-black">{dashboard.title} is coming soon</h2>
+      <p className="mt-3 text-center leading-7 text-slate-600">
+        This dashboard is coming soon. Our developers are currently building and refining it. Once available, we’ll notify you via email. Consider subscribing to our newsletter to stay updated.
+      </p>
+      <NewsletterSignup />
+    </Modal>
+  )
+}
+
+function SuccessOverlay({ message }: { message: string }) {
+  return (
+    <motion.div animate={{ opacity: 1 }} className="fixed inset-0 z-[60] grid place-items-center bg-emerald-950/45 p-4 backdrop-blur-sm" initial={{ opacity: 0 }}>
+      <motion.div animate={{ scale: 1, rotate: 0 }} className="w-full max-w-sm rounded-[1.5rem] bg-white p-6 text-center shadow-2xl" initial={{ scale: 0.86, rotate: -3 }}>
+        <motion.div animate={{ scale: [1, 1.2, 1] }} className="mx-auto grid size-20 place-items-center rounded-2xl bg-emerald-100 text-emerald-700" transition={{ duration: 0.7, repeat: Infinity }}>
+          <UnlockKeyhole className="size-9" />
+        </motion.div>
+        <h2 className="mt-4 text-2xl font-black">Success</h2>
+        <p className="mt-2 font-bold text-emerald-700">{message}</p>
+      </motion.div>
+    </motion.div>
+  )
+}
+
+function AccountAutoModal({
+  appUser,
+  dashboards,
+  onAuthOpen,
+  onSubscriptionChange,
+  subscription,
+}: {
+  appUser: AppUser
+  dashboards: Dashboard[]
+  onAuthOpen: () => void
+  onSubscriptionChange: (subscription: UserSubscription | null) => void
+  subscription: UserSubscription | null
+}) {
+  const [open, setOpen] = useState(false)
+  useEffect(() => {
+    const openAccount = () => setOpen(true)
+    window.addEventListener('nexagen:open-account', openAccount)
+    return () => window.removeEventListener('nexagen:open-account', openAccount)
+  }, [])
+  return open ? (
+    <AccountModal
+      appUser={appUser}
+      dashboards={dashboards}
+      onAuthOpen={onAuthOpen}
+      onClose={() => setOpen(false)}
+      onSubscriptionChange={onSubscriptionChange}
+      subscription={subscription}
+    />
+  ) : null
+}
+
+function AccountModal({ appUser, dashboards, onAuthOpen, onClose, onSubscriptionChange, subscription }: {
+  appUser: AppUser
+  dashboards: Dashboard[]
+  onAuthOpen: () => void
+  onClose: () => void
+  onSubscriptionChange: (subscription: UserSubscription | null) => void
+  subscription: UserSubscription | null
+}) {
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [message, setMessage] = useState('')
+
+  useEffect(() => {
+    if (!appUser.user) return
+    void getUserProfile(appUser.user.id).then((profile) => setUsername(profile?.username ?? ''))
+  }, [appUser.user])
+
+  const save = async () => {
+    if (!appUser.user) {
+      onAuthOpen()
+      return
+    }
+    await saveUserProfile({ userId: appUser.user.id, username })
+    if (password.trim()) {
+      const { error } = await supabase.auth.updateUser({ password })
+      if (error) {
+        setMessage(error.message)
+        return
+      }
+      setPassword('')
+    }
+    setMessage('Account updated.')
+  }
+
+  const switchPlan = async (plan: SubscriptionPlan) => {
+    if (!appUser.user) {
+      onAuthOpen()
+      return
+    }
+    const saved = await activateTestSubscription({
+      userId: appUser.user.id,
+      plan,
+      dashboardsAccess: plan === 'pro' ? ['all'] : [dashboardAccessKey(dashboards[0])],
+    })
+    onSubscriptionChange(saved)
+    setMessage(`${plan === 'pro' ? 'Pro Access' : 'Starter Pass'} selected.`)
+  }
+
+  return (
+    <Modal onClose={onClose}>
+      <p className="text-sm font-bold uppercase tracking-[.16em] text-teal-700">My Account</p>
+      <h2 className="mt-2 text-2xl font-black">{appUser.user?.email ?? 'Sign in required'}</h2>
+      <div className="mt-5 grid gap-3 rounded-2xl bg-slate-50 p-4 text-sm font-bold text-slate-700">
+        <span>Email: {appUser.user?.email ?? 'Not signed in'}</span>
+        <span>Current plan: {subscription?.plan ?? 'none'}</span>
+        <span>Plan expiry date: {subscription ? new Date(subscription.expires_at).toLocaleDateString() : 'No active plan'}</span>
+        <span>Dashboard access: {subscription?.dashboards_access.join(', ') || 'none'}</span>
+      </div>
+      <div className="mt-4 grid gap-3">
+        <input className="rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-teal-400" onChange={(event) => setUsername(event.target.value)} placeholder="Username" value={username} />
+        <input className="rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-teal-400" onChange={(event) => setPassword(event.target.value)} placeholder="New password" type="password" value={password} />
+      </div>
+      <div className="mt-4 grid gap-2 sm:grid-cols-3">
+        <button className="rounded-full bg-slate-950 px-4 py-2 text-sm font-black text-white" onClick={() => void save()}>Save</button>
+        <button className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-800" onClick={() => void switchPlan('starter')}>Starter</button>
+        <button className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-800" onClick={() => void switchPlan('pro')}>Pro</button>
+      </div>
+      {message && <p className="mt-4 rounded-2xl bg-teal-50 p-3 text-sm font-bold text-teal-800">{message}</p>}
+    </Modal>
+  )
+}
+
 function AuthModal({ onClose }: { onClose: () => void }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -4111,8 +4689,8 @@ function AuthModal({ onClose }: { onClose: () => void }) {
       setMessage(friendlyMessage)
       return
     }
-    setMessage(mode === 'signup' ? 'Check email if confirmation is enabled, or continue if your project allows instant sign-in.' : 'Signed in.')
-    if (mode === 'signin') onClose()
+    setMessage(mode === 'signup' ? 'Account created.' : 'Signed in.')
+    onClose()
   }
 
   return (
@@ -4123,7 +4701,7 @@ function AuthModal({ onClose }: { onClose: () => void }) {
         </div>
         <div>
           <h2 className="text-2xl font-black">Welcome to NexaGen</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-500">Create an account or sign in to save progress and test subscriptions.</p>
+          <p className="mt-2 text-sm leading-6 text-slate-500">Sign in or create an account to save progress and manage your plan.</p>
         </div>
       </div>
       <div className="mt-6 space-y-3">
@@ -4144,10 +4722,10 @@ function AuthModal({ onClose }: { onClose: () => void }) {
       {message && <p className="mt-4 rounded-2xl bg-slate-50 p-3 text-sm text-slate-600">{message}</p>}
       <div className="mt-6 grid gap-3 sm:grid-cols-2">
         <button className="rounded-full bg-slate-950 px-5 py-3 font-bold text-white disabled:opacity-60" disabled={busy} onClick={() => submit('signin')}>
-          Sign in
+          Already have an account? Sign in
         </button>
         <button className="rounded-full border border-slate-200 bg-white px-5 py-3 font-bold text-slate-800 disabled:opacity-60" disabled={busy} onClick={() => submit('signup')}>
-          Create account
+          New here? Create account
         </button>
       </div>
     </Modal>
@@ -4194,7 +4772,7 @@ function Modal({ children, onClose }: { children: ReactNode; onClose: () => void
     <motion.div animate={{ opacity: 1 }} className="fixed inset-0 z-50 grid place-items-center bg-slate-950/35 p-4 backdrop-blur-sm" exit={{ opacity: 0 }} initial={{ opacity: 0 }}>
       <motion.div
         animate={{ y: 0, scale: 1 }}
-        className="w-full max-w-md rounded-[1.5rem] bg-white p-6 shadow-2xl"
+        className="w-full max-w-3xl rounded-[1.5rem] bg-white p-6 shadow-2xl"
         exit={{ y: 20, scale: 0.98 }}
         initial={{ y: 20, scale: 0.98 }}
       >
