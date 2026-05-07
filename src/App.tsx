@@ -1,6 +1,7 @@
 import { AnimatePresence, motion, useMotionValue, useTransform } from 'framer-motion'
 import {
   ArrowLeft,
+  ArrowUp,
   BarChart3,
   BadgeCheck,
   BookOpen,
@@ -108,6 +109,39 @@ import type { AppUser, ContentItem, Dashboard, SkillLevel, Subtopic } from './ty
 
 const Editor = lazy(() => import('@monaco-editor/react'))
 
+const imageSizes = '(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw'
+
+const languageLogoUrls: Record<string, string> = {
+  python: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/python/python-original.svg',
+  javascript: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/javascript/javascript-original.svg',
+  typescript: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/typescript/typescript-original.svg',
+  java: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/java/java-original.svg',
+  c: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/c/c-original.svg',
+  cpp: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/cplusplus/cplusplus-original.svg',
+  csharp: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/csharp/csharp-original.svg',
+  go: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/go/go-original.svg',
+  rust: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/rust/rust-original.svg',
+  dart: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/dart/dart-original.svg',
+  kotlin: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/kotlin/kotlin-original.svg',
+  swift: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/swift/swift-original.svg',
+  php: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/php/php-original.svg',
+  ruby: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/ruby/ruby-original.svg',
+  sql: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/postgresql/postgresql-original.svg',
+  bash: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/bash/bash-original.svg',
+  powershell: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/powershell/powershell-original.svg',
+  r: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/r/r-original.svg',
+  matlab: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/matlab/matlab-original.svg',
+  scala: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/scala/scala-original.svg',
+}
+
+const partnerLogoUrls: Record<string, string> = {
+  Zeraki: 'https://logo.clearbit.com/zeraki.co.ke',
+  W3Schools: 'https://logo.clearbit.com/w3schools.com',
+  IntaSend: 'https://logo.clearbit.com/intasend.com',
+  NCI: 'https://logo.clearbit.com/nci.ac.ke',
+  'TopHeights Electricals': 'https://logo.clearbit.com/topheightselectricals.com',
+}
+
 const visuals = [
   'https://images.unsplash.com/photo-1520523839897-bd0b52f945a0?auto=format&fit=crop&w=1000&q=80',
   'https://images.unsplash.com/photo-1515879218367-8466d910aaa4?auto=format&fit=crop&w=1000&q=80',
@@ -116,6 +150,20 @@ const visuals = [
 
 const interests = ['Music', 'Programming', 'Operating Systems', 'PowerShell', 'Computer Basics']
 const defaultPdfPath = '/javacript.pdf'
+
+function LanguageLogo({ language }: { language: ProgrammingLanguage }) {
+  const [failed, setFailed] = useState(false)
+  const src = languageLogoUrls[language.id]
+  if (!src || failed) return <Code2 className="size-5" />
+  return <img alt={`${language.name} logo`} className="size-7 object-contain" decoding="async" loading="lazy" onError={() => setFailed(true)} src={src} />
+}
+
+function PartnerLogo({ name }: { name: string }) {
+  const [failed, setFailed] = useState(false)
+  const src = partnerLogoUrls[name]
+  if (!src || failed) return <BadgeCheck className="size-5" />
+  return <img alt={`${name} logo`} className="size-7 object-contain" decoding="async" loading="lazy" onError={() => setFailed(true)} src={src} />
+}
 
 const availableDashboardSlugs = ['piano-12-keys', 'programming']
 
@@ -277,6 +325,8 @@ function App() {
   const [subscription, setSubscription] = useState<UserSubscription | null>(null)
   const [pianoLevel, setPianoLevelState] = useState<SkillLevel | null>(() => localStorage.getItem('nexagen:piano-level') as SkillLevel | null)
   const [programmingLevel, setProgrammingLevelState] = useState<SkillLevel | null>(() => localStorage.getItem('nexagen:programming-level') as SkillLevel | null)
+  const [bootLoading, setBootLoading] = useState(true)
+  const [bootError, setBootError] = useState('')
 
   useEffect(() => {
     if (!supabaseConfigured) return
@@ -293,12 +343,17 @@ function App() {
   }, [])
 
   useEffect(() => {
-    Promise.all([getDashboards(), getContentItems(), getSubtopics()]).then(([dashboardRows, contentRows, subtopicRows]) => {
-      setDashboards(dashboardRows)
-      setContent(contentRows)
-      setSubtopics(subtopicRows)
-      setSelectedId((current) => current ?? dashboardRows[0]?.id ?? null)
-    })
+    setBootLoading(true)
+    setBootError('')
+    Promise.all([getDashboards(), getContentItems(), getSubtopics()])
+      .then(([dashboardRows, contentRows, subtopicRows]) => {
+        setDashboards(dashboardRows)
+        setContent(contentRows)
+        setSubtopics(subtopicRows)
+        setSelectedId((current) => current ?? dashboardRows[0]?.id ?? null)
+      })
+      .catch(() => setBootError('We could not load NexaGen content right now. Try again.'))
+      .finally(() => setBootLoading(false))
   }, [])
 
   useEffect(() => {
@@ -374,6 +429,8 @@ function App() {
           onSubtopicUnlock={(id) => setSubtopicUnlocks((current) => Array.from(new Set([...current, id])))}
           unlocks={unlocks}
           subscription={subscription}
+          bootLoading={bootLoading}
+          bootError={bootError}
         />
       </NexaGenContext.Provider>
     </main>
@@ -437,8 +494,11 @@ function Onboarding({ onFinish }: { onFinish: (mode: 'auth' | 'guest') => void }
             <motion.img
               alt=""
               animate={{ opacity: index === step % visuals.length ? 1 : 0, scale: index === step % visuals.length ? 1 : 1.08 }}
-              className="absolute inset-0 h-full w-full object-cover"
+              className="blur-load absolute inset-0 h-full w-full object-cover"
+              decoding="async"
               key={src}
+              loading={index === 0 ? 'eager' : 'lazy'}
+              sizes={imageSizes}
               src={src}
               transition={{ duration: 0.7 }}
             />
@@ -548,6 +608,8 @@ type LandingShellProps = {
   subtopicUnlocks: string[]
   subtopics: Subtopic[]
   subscription: UserSubscription | null
+  bootLoading: boolean
+  bootError: string
   unlocks: string[]
 }
 
@@ -572,6 +634,8 @@ function LandingShell(props: LandingShellProps) {
     subtopicUnlocks,
     subtopics,
     subscription,
+    bootLoading,
+    bootError,
     unlocks,
   } = props
   const [query, setQuery] = useState('')
@@ -628,6 +692,10 @@ function LandingShell(props: LandingShellProps) {
     return () => window.removeEventListener('nexagen:revision-cards', onRevision)
   }, [])
 
+  if (bootLoading) return <AppSkeleton />
+
+  if (bootError) return <AppErrorState message={bootError} onRetry={() => window.location.reload()} />
+
   return (
     <>
       <div className="ticker-bar group sticky top-0 z-40 overflow-hidden bg-[#103b4a] py-2 text-sm font-bold text-white shadow-lg">
@@ -650,6 +718,18 @@ function LandingShell(props: LandingShellProps) {
               <span className="block text-xs font-semibold uppercase tracking-[.18em] text-teal-700">Learn and unlock</span>
             </span>
           </button>
+          <div className="hidden items-center gap-1 text-sm font-black text-slate-600 lg:flex">
+            {[
+              ['Search', '#search'],
+              ['Dashboards', '#dashboards'],
+              ['Pricing', '#pricing'],
+              ['Support', '#support'],
+            ].map(([label, href]) => (
+              <a className="rounded-full px-3 py-2 transition hover:bg-slate-100 hover:text-slate-950" href={href} key={href}>
+                {label}
+              </a>
+            ))}
+          </div>
           <div className="flex items-center gap-3">
             <button
               aria-label="Open menu"
@@ -724,8 +804,12 @@ function LandingShell(props: LandingShellProps) {
               <motion.img
                 alt=""
                 animate={{ y: index % 2 ? 18 : -12 }}
-                className="h-72 w-full rounded-[1.5rem] object-cover shadow-2xl shadow-slate-200"
+                className="blur-load h-72 w-full rounded-[1.5rem] object-cover shadow-2xl shadow-slate-200"
+                decoding="async"
+                fetchPriority={index === 0 ? 'high' : 'auto'}
                 key={src}
+                loading={index === 0 ? 'eager' : 'lazy'}
+                sizes={imageSizes}
                 src={src}
                 transition={{ duration: 3 + index, repeat: Infinity, repeatType: 'reverse', ease: 'easeInOut' }}
               />
@@ -785,6 +869,7 @@ function LandingShell(props: LandingShellProps) {
                   </div>
                   <h3 className="text-lg font-black">{dashboard.title}</h3>
                   <p className="mt-2 line-clamp-3 text-sm leading-6 text-slate-600">{dashboard.description}</p>
+                  <span className="mt-4 inline-flex rounded-full bg-slate-950 px-4 py-2 text-sm font-black text-white">Explore</span>
                 </button>
               )
             })}
@@ -842,7 +927,7 @@ function LandingShell(props: LandingShellProps) {
         unlocks={effectiveUnlocks}
       />
 
-      <footer className="mx-auto max-w-7xl px-4 py-12 text-slate-800">
+      <footer className="mx-auto max-w-7xl scroll-mt-28 px-4 py-12 text-slate-800" id="support">
         <div className="grid gap-8 border-t border-slate-200 pt-8 md:grid-cols-[1.1fr_.9fr_.9fr]">
           <div>
             <div className="flex items-center gap-3">
@@ -902,9 +987,17 @@ function LandingShell(props: LandingShellProps) {
         </div>
         <div className="mt-8 flex flex-col gap-2 border-t border-slate-200 pt-5 text-xs font-semibold text-slate-500 sm:flex-row sm:items-center sm:justify-between">
           <span>© {new Date().getFullYear()} NexaGen Technology Ltd. All rights reserved.</span>
-          <span>Powered by GracyAI</span>
+          <span className="flex flex-wrap gap-3">
+            <a href="#dashboards">Quick navigation</a>
+            <a href="#pricing">Pricing</a>
+            <a href="#support">Support</a>
+            <span>Terms & Privacy placeholders</span>
+            <span>Powered by GracyAI</span>
+          </span>
         </div>
       </footer>
+
+      <ScrollToTopButton />
 
       <FloatingLearningAssistant
         context={{
@@ -1172,7 +1265,7 @@ function GlobalSearch({
   }, [content, dashboards, query, songs, subtopics])
 
   return (
-    <section className="mx-auto max-w-7xl px-4 py-6">
+    <section className="mx-auto max-w-7xl scroll-mt-28 px-4 py-6" id="search">
       <div className="rounded-[1.5rem] border border-slate-100 bg-white p-4 shadow-sm">
         <label className="flex items-center gap-3 rounded-2xl bg-slate-50 px-4 py-3">
           <Search className="size-5 text-teal-700" />
@@ -1191,20 +1284,97 @@ function GlobalSearch({
                   {item.title}
                 </button>
               ))}
+              {!results.dashboards.length && <EmptyState compact message="No dashboard found." />}
             </SearchGroup>
             <SearchGroup title="Subtopics">
               {results.subtopics.map((item) => <div className="rounded-xl bg-slate-50 p-3 text-sm font-bold" key={item.id}>{item.title}</div>)}
+              {!results.subtopics.length && <EmptyState compact message="No matching subtopics." />}
             </SearchGroup>
             <SearchGroup title="Questions">
               {results.questions.map((item) => <div className="rounded-xl bg-slate-50 p-3 text-sm font-bold" key={item.id}>{item.title}</div>)}
+              {!results.questions.length && <EmptyState compact message="No matching questions." />}
             </SearchGroup>
             <SearchGroup title="Songs">
               {results.songs.map((item) => <div className="rounded-xl bg-slate-50 p-3 text-sm font-bold" key={item.title}>{item.title} - {item.artist}</div>)}
+              {!results.songs.length && <EmptyState compact message="No song suggestions yet." />}
             </SearchGroup>
           </div>
         )}
       </div>
     </section>
+  )
+}
+
+function EmptyState({ compact = false, message }: { compact?: boolean; message: string }) {
+  return (
+    <div className={`${compact ? 'rounded-xl p-3 text-xs' : 'rounded-2xl p-5 text-sm'} border border-dashed border-slate-200 bg-slate-50 font-bold text-slate-500`}>
+      {message}
+    </div>
+  )
+}
+
+function AppSkeleton() {
+  return (
+    <main className="min-h-screen bg-[#f7f9fc] px-4 py-6">
+      <div className="mx-auto max-w-7xl space-y-5">
+        <div className="skeleton h-16 rounded-2xl" />
+        <div className="grid gap-5 lg:grid-cols-[.9fr_1.1fr]">
+          <div className="space-y-4">
+            <div className="skeleton h-12 rounded-2xl" />
+            <div className="skeleton h-32 rounded-2xl" />
+            <div className="skeleton h-12 w-64 rounded-full" />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="skeleton h-72 rounded-[1.5rem]" />
+            <div className="skeleton h-72 rounded-[1.5rem]" />
+            <div className="skeleton h-72 rounded-[1.5rem]" />
+          </div>
+        </div>
+      </div>
+    </main>
+  )
+}
+
+function AppErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <main className="grid min-h-screen place-items-center bg-[#f7f9fc] p-4">
+      <div className="max-w-md rounded-[1.5rem] border border-slate-100 bg-white p-6 text-center shadow-xl">
+        <ShieldCheck className="mx-auto size-10 text-teal-700" />
+        <h1 className="mt-3 text-2xl font-black">We could not load this content right now.</h1>
+        <p className="mt-2 leading-7 text-slate-600">{message}</p>
+        <button className="mt-5 rounded-full bg-slate-950 px-5 py-3 font-black text-white" onClick={onRetry}>Retry</button>
+      </div>
+    </main>
+  )
+}
+
+function ScrollToTopButton() {
+  const [visible, setVisible] = useState(false)
+
+  useEffect(() => {
+    const onScroll = () => setVisible(window.scrollY > 520)
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+
+  return (
+    <AnimatePresence>
+      {visible && (
+        <motion.button
+          aria-label="Scroll to top"
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          className="fixed bottom-24 right-5 z-50 grid size-12 place-items-center rounded-full bg-teal-600 text-white shadow-[0_0_28px_rgba(13,148,136,.45)] ring-1 ring-white/40"
+          exit={{ opacity: 0, y: 10, scale: 0.95 }}
+          initial={{ opacity: 0, y: 10, scale: 0.95 }}
+          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+          whileHover={{ y: -3 }}
+          whileTap={{ scale: 0.94 }}
+        >
+          <ArrowUp className="size-5" />
+        </motion.button>
+      )}
+    </AnimatePresence>
   )
 }
 
@@ -1412,6 +1582,7 @@ function ExploreDashboards({
                 <span className="text-xs font-black text-slate-500">{isUnlocked ? 'Open' : 'Locked'}</span>
               </div>
               <h3 className="mt-4 text-base font-black">{dashboard.title}</h3>
+              <span className="mt-4 inline-flex rounded-full bg-slate-950 px-3 py-2 text-xs font-black text-white">Explore</span>
             </button>
           )
         })}
@@ -1894,7 +2065,9 @@ function LaunchTrustSections({ appUser }: { appUser: AppUser }) {
             {partners.map(([name, description]) => (
               <div className="group rounded-2xl border border-slate-100 bg-slate-50 p-4 transition hover:-translate-y-1 hover:bg-white hover:shadow-lg" key={name}>
                 <div className="flex items-center gap-3">
-                  <span className="grid size-12 place-items-center rounded-2xl bg-slate-950 text-sm font-black text-white">{name.slice(0, 2).toUpperCase()}</span>
+                  <span className="grid size-12 place-items-center rounded-2xl bg-white text-slate-950 shadow-sm ring-1 ring-slate-200">
+                    <PartnerLogo name={name} />
+                  </span>
                   <h3 className="font-black">{name}</h3>
                 </div>
                 <p className="mt-3 text-sm font-semibold leading-6 text-slate-500 opacity-80 group-hover:opacity-100">{description}</p>
@@ -2424,7 +2597,7 @@ function DashboardDetail({
             onToggle={() => toggleCompleted(item.id)}
           />
         ))}
-        {!visibleItems.length && <p className="rounded-2xl bg-slate-50 p-5 text-slate-500">No content matched that search.</p>}
+        {!visibleItems.length && <EmptyState message="No content matched that search. Try a different keyword." />}
       </div>
 
       {!isUnlocked && (
@@ -2560,7 +2733,9 @@ function ProgrammingDashboard({
               }}
             >
               <div className="mb-3 flex items-start justify-between gap-3">
-                <span className="grid size-11 place-items-center rounded-2xl bg-slate-950 text-sm font-black text-white">{item.logo}</span>
+                <span className="grid size-11 place-items-center rounded-2xl bg-white text-slate-950 shadow-sm ring-1 ring-slate-200">
+                  <LanguageLogo language={item} />
+                </span>
                 <span className="text-xs font-black text-teal-700">{item.useCases[0]}</span>
               </div>
               <h4 className="font-black">{item.name}</h4>
@@ -2852,13 +3027,13 @@ function ProgrammingIde({
         </span>
       </div>
       <div className="overflow-hidden rounded-2xl border border-slate-200">
-        <CodeEditor height="360px" language={language.monaco} onChange={(value) => setCode(value ?? '')} value={code} options={{ minimap: { enabled: false }, fontSize: 14, wordWrap: 'on' }} />
+        <CodeEditor height="clamp(320px, 55vh, 520px)" language={language.monaco} onChange={(value) => setCode(value ?? '')} value={code} options={{ minimap: { enabled: false }, fontSize: 14, wordWrap: 'on' }} />
       </div>
       <div className="mt-4 flex flex-wrap gap-2">
         <button className="rounded-full bg-slate-950 px-4 py-2 text-sm font-bold text-white" onClick={runCode}>Run code</button>
         <button className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700" onClick={reset}>Try Again</button>
         <button className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700" onClick={() => setHintOpen(!hintOpen)}>Show Hint</button>
-        <button className="rounded-full bg-teal-700 px-4 py-2 text-sm font-bold text-white" onClick={complete}>Mark solved</button>
+        <button className="ripple rounded-full bg-teal-700 px-4 py-2 text-sm font-bold text-white" onClick={complete}>Start Challenge</button>
         <button className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700" onClick={() => onMoveQuestion(-1)}>Previous</button>
         <button className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700" onClick={() => onMoveQuestion(1)}>Next challenge</button>
       </div>
@@ -2943,7 +3118,7 @@ function CodeEditor(props: {
   value?: string
 }) {
   return (
-    <Suspense fallback={<div className="grid h-[260px] place-items-center bg-slate-950 font-bold text-white">Loading editor...</div>}>
+    <Suspense fallback={<div className="skeleton grid h-[260px] place-items-center rounded-2xl bg-slate-950 font-bold text-white">Loading editor...</div>}>
       <Editor {...props} theme="vs-dark" />
     </Suspense>
   )
@@ -3234,6 +3409,7 @@ function PianoDashboard({
             {selectedItems.map((item) => (
               <QnaItem appUser={appUser} completed={completed.includes(item.id)} item={item} key={item.id} onToggle={() => toggleCompleted(item.id)} />
             ))}
+            {!selectedItems.length && <EmptyState message="No cards match this subtopic search yet." />}
           </div>
         </div>
       </div>
@@ -3878,7 +4054,10 @@ function QnaItem({
   return (
     <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
       <button className="flex w-full items-center justify-between gap-4 text-left" onClick={() => setOpen(!open)}>
-        <span className="font-black">{item.title}</span>
+        <span>
+          <span className="block font-black">{item.title}</span>
+          <span className="mt-1 block text-xs font-bold text-teal-700">{open ? 'Hide guide' : 'Read More'}</span>
+        </span>
         <ChevronDown className={`size-5 shrink-0 transition ${open ? 'rotate-180' : ''}`} />
       </button>
       <AnimatePresence>
