@@ -63,11 +63,11 @@ export const GracyAI: React.FC = () => {
                         className="mb-4 w-[350px] md:w-[400px]"
                     >
                         <GlassCard className="p-0 overflow-hidden shadow-2xl border-nexagen-green/20">
-                            {/* Header */}
-                            <div className="premium-gradient p-4 text-white flex items-center justify-between">
+{/* Header */}
+                            <div className="nexagen-bg-overlay p-4 text-white flex items-center justify-between">
                                 <div className="flex items-center space-x-3">
-                                    <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
-                                        <Cpu size={18} />
+                                    <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-white/30 shadow-lg">
+                                        <img src="/nexagen.jpeg" alt="NexaGen" className="w-full h-full object-cover" />
                                     </div>
                                     <div>
                                         <h4 className="font-bold text-sm">GracyAI Assistant</h4>

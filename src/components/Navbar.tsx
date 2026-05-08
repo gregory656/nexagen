@@ -34,10 +34,10 @@ export const Navbar: React.FC = () => {
                 "max-w-7xl mx-auto glass rounded-full px-6 py-2 flex items-center justify-between transition-all duration-300",
                 isScrolled ? "bg-white/80" : "bg-white/40"
             )}>
-                {/* Logo */}
+{/* Logo */}
                 <Link to="/" className="flex items-center space-x-2">
-                    <div className="w-10 h-10 premium-gradient rounded-xl flex items-center justify-center">
-                        <span className="text-white font-bold text-xl">N</span>
+<div className="w-10 h-10 rounded-full nexagen-bg flex items-center justify-center overflow-hidden border-2 border-white/30 shadow-lg">
+                        <img src="/nexagen.jpeg" alt="NexaGen" className="w-full h-full object-cover" />
                     </div>
                     <span className="text-2xl font-bold text-nexagen-green hidden sm:inline-block">
                         Nexa<span className="text-nexagen-blue">Gen</span>

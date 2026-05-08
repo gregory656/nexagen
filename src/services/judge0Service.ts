@@ -51,9 +51,9 @@ export async function executeJudge0(language: ProgrammingLanguage, sourceCode: s
 
   if (!baseUrl) {
     return {
-      output: 'Execution API is not configured. Add VITE_JUDGE0_URL to .env.local to run code remotely.',
+      output: 'The code runner is not connected yet. You can still write, edit, and compare your solution here; live execution will be available once the NexaGen runner is connected.',
       status: 'error',
-      statusText: 'Missing Judge0 URL',
+      statusText: 'Runner offline',
     }
   }
 

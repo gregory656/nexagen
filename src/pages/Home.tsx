@@ -36,8 +36,8 @@ export const Home: React.FC = () => {
 
     return (
         <div className="space-y-24 pb-24">
-            {/* Hero Section */}
-            <section className="relative h-[80vh] flex items-center justify-center overflow-hidden px-6">
+{/* Hero Section */}
+            <section className="relative h-[80vh] flex items-center justify-center overflow-hidden px-6 nexagen-hero-bg">
                 <div className="absolute inset-0 z-0">
                     <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-nexagen-green/20 rounded-full blur-[120px] animate-pulse" />
                     <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-nexagen-blue/20 rounded-full blur-[120px] animate-pulse delay-700" />

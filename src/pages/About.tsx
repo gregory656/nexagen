@@ -12,8 +12,8 @@ export const About: React.FC = () => {
 
     return (
         <div className="pb-24">
-            {/* Hero */}
-            <section className="bg-nexagen-dark text-white py-24 px-6 text-center">
+{/* Hero */}
+            <section className="nexagen-bg-dark-overlay text-white py-24 px-6 text-center">
                 <motion.h1
                     initial={{ opacity: 0, scale: 0.9 }}
                     animate={{ opacity: 1, scale: 1 }}
@@ -21,7 +21,7 @@ export const About: React.FC = () => {
                 >
                     Our Story
                 </motion.h1>
-                <p className="text-gray-400 max-w-2xl mx-auto text-lg">
+                <p className="text-gray-300 max-w-2xl mx-auto text-lg">
                     NexaGen was born from a simple idea: that technology should bridge the gap between campus administration and student life.
                 </p>
             </section>

@@ -44,7 +44,7 @@ Deno.serve(async (request) => {
 
   const amount = body.plan_name === 'pro' ? 150 : 100
   const dashboardAccess = body.plan_name === 'pro' ? ['all'] : [body.selected_dashboard ?? 'piano-12-keys']
-  const languageAccess = body.plan_name === 'pro' ? ['all'] : ['javascript']
+  const languageAccess = body.plan_name === 'pro' ? ['all'] : ['python', 'javascript', 'typescript', 'java', 'c', 'cpp', 'csharp', 'go', 'rust', 'dart']
 
   const apiRef = `nexagen-${crypto.randomUUID()}`
   const paymentPayload = {

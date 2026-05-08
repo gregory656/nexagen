@@ -190,6 +190,34 @@ const dashboardIsSubscriptionUnlocked = (dashboard: Dashboard, subscription: Use
 const buildEffectiveUnlocks = (dashboards: Dashboard[], unlocks: string[], subscription: UserSubscription | null) =>
   Array.from(new Set([...unlocks, ...dashboards.filter((dashboard) => dashboardIsSubscriptionUnlocked(dashboard, subscription)).map((dashboard) => dashboard.id)]))
 
+const starterLanguageIds = programmingLanguages.slice(0, 10).map((item) => item.id)
+
+const normalizeLanguageAccess = (access: string[]) => {
+  const byName = new Map(programmingLanguages.map((item) => [item.name.toLowerCase(), item.id]))
+  const byId = new Set(programmingLanguages.map((item) => item.id))
+  return access.map((item) => {
+    const normalized = item.toLowerCase()
+    return byId.has(normalized) ? normalized : byName.get(normalized) ?? normalized
+  })
+}
+
+const languageLimitForSubscription = (subscription: UserSubscription | null) => {
+  if (!subscription || new Date(subscription.expires_at).getTime() <= Date.now()) return 0
+  if (subscription.plan === 'pro' && subscription.amount > 0) return programmingLanguages.length
+  if (subscription.amount === 0) return 1
+  return subscription.plan === 'starter' ? 10 : programmingLanguages.length
+}
+
+const selectedLanguageIdsForSubscription = (subscription: UserSubscription | null) => {
+  const limit = languageLimitForSubscription(subscription)
+  if (!subscription || limit === 0) return []
+  const access = normalizeLanguageAccess(subscription.language_access)
+  if (access.includes('all')) return programmingLanguages.map((item) => item.id)
+  if (subscription.amount === 0 && access[0]) return [access[0]]
+  if (subscription.plan === 'starter') return access.length > 1 ? access.slice(0, 10) : starterLanguageIds
+  return access.length ? access : programmingLanguages.map((item) => item.id)
+}
+
 type NexaGenState = {
   user: AppUser
   unlocks: string[]
@@ -651,6 +679,7 @@ function LandingShell(props: LandingShellProps) {
   const [query, setQuery] = useState('')
   const [unlockTarget, setUnlockTarget] = useState<Dashboard | null>(null)
   const [planTarget, setPlanTarget] = useState<Dashboard | null>(null)
+  const [planModalMode, setPlanModalMode] = useState<'required' | 'upgrade'>('required')
   const [comingSoonDashboard, setComingSoonDashboard] = useState<Dashboard | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [analyticsOpen, setAnalyticsOpen] = useState(false)
@@ -674,6 +703,7 @@ function LandingShell(props: LandingShellProps) {
       return
     }
     if (!dashboardIsSubscriptionUnlocked(dashboard, subscription)) {
+      setPlanModalMode('required')
       setPlanTarget(dashboard)
       return
     }
@@ -688,6 +718,21 @@ function LandingShell(props: LandingShellProps) {
     }
     setProgressMessage('Your progress is now being tracked. Visit Analytics Dashboard to monitor your learning.')
     window.setTimeout(() => setProgressMessage(''), 5200)
+  }
+
+  const openUpgradePlans = () => {
+    if (!appUser.user) {
+      onAuthOpen()
+      return
+    }
+    const targetDashboard = focusedDashboard
+      ?? selectedDashboard
+      ?? dashboards.find((item) => dashboardAccessKey(item) === 'programming')
+      ?? dashboards.find((item) => availableDashboardSlugs.includes(dashboardAccessKey(item)))
+      ?? dashboards[0]
+    if (!targetDashboard) return
+    setPlanModalMode('upgrade')
+    setPlanTarget(targetDashboard)
   }
 
   const selectedContent = useMemo(() => {
@@ -748,9 +793,9 @@ function LandingShell(props: LandingShellProps) {
       <header className="sticky top-0 z-30 border-b border-white/70 bg-white/75 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4">
           <button className="flex items-center gap-3" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
-            <span className="grid size-11 place-items-center rounded-2xl bg-slate-950 text-white shadow-lg">
-              <Compass className="size-5" />
-            </span>
+<div className="w-11 h-11 rounded-full overflow-hidden border-2 border-white/30 shadow-lg">
+              <img src="/nexagen.jpeg" alt="NexaGen" className="w-full h-full object-cover" />
+            </div>
             <span>
               <span className="block text-xl font-black">NexaGen</span>
               <span className="block text-xs font-semibold uppercase tracking-[.18em] text-teal-700">Learn and unlock</span>
@@ -769,6 +814,14 @@ function LandingShell(props: LandingShellProps) {
             ))}
           </div>
           <div className="flex items-center gap-3">
+            <button
+              className="relative inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-amber-300 via-yellow-400 to-teal-400 px-4 py-2.5 text-sm font-black text-slate-950 shadow-lg shadow-amber-200/70 ring-2 ring-white transition hover:-translate-y-0.5 hover:shadow-xl sm:px-5"
+              onClick={openUpgradePlans}
+            >
+              <Sparkles className="size-4 animate-pulse" />
+              Upgrade
+              <span className="absolute -right-1 -top-1 size-3 rounded-full bg-white shadow ring-2 ring-amber-300" />
+            </button>
             <button
               aria-label="Open menu"
               className="grid size-11 place-items-center rounded-full border border-slate-200 bg-white text-slate-800 shadow-sm"
@@ -953,6 +1006,7 @@ function LandingShell(props: LandingShellProps) {
             setQuery={setQuery}
             subtopicUnlocks={subtopicUnlocks}
             subtopics={subtopics}
+            subscription={subscription}
             unlocks={effectiveUnlocks}
           />
         )}
@@ -1072,6 +1126,7 @@ function LandingShell(props: LandingShellProps) {
             appUser={appUser}
             dashboard={planTarget}
             dashboards={dashboards}
+            mode={planModalMode}
             onAuthOpen={onAuthOpen}
             onClose={() => setPlanTarget(null)}
             onOpenDashboard={(dashboardId, message) => {
@@ -1118,6 +1173,7 @@ function DashboardWorkspace({
   setQuery,
   subtopicUnlocks,
   subtopics,
+  subscription,
   unlocks,
 }: {
   appUser: AppUser
@@ -1137,6 +1193,7 @@ function DashboardWorkspace({
   setQuery: (value: string) => void
   subtopicUnlocks: string[]
   subtopics: Subtopic[]
+  subscription: UserSubscription | null
   unlocks: string[]
 }) {
   return (
@@ -1185,6 +1242,7 @@ function DashboardWorkspace({
           setQuery={setQuery}
           subtopicUnlocks={subtopicUnlocks}
           subtopics={subtopics}
+          subscription={subscription}
           unlocks={unlocks}
         />
       </div>
@@ -2577,6 +2635,7 @@ function DashboardDetail({
   setQuery,
   subtopicUnlocks,
   subtopics,
+  subscription,
   unlocks,
 }: {
   appUser: AppUser
@@ -2595,6 +2654,7 @@ function DashboardDetail({
   setQuery: (value: string) => void
   subtopicUnlocks: string[]
   subtopics: Subtopic[]
+  subscription: UserSubscription | null
   unlocks: string[]
 }) {
   const isUnlocked = !dashboard.is_locked || unlocks.includes(dashboard.id)
@@ -2662,6 +2722,7 @@ function DashboardDetail({
         dashboard={dashboard}
         onProgrammingLevelChange={onProgrammingLevelChange}
         programmingLevel={programmingLevel}
+        subscription={subscription}
       />
     )
   }
@@ -2780,27 +2841,47 @@ function ProgrammingDashboard({
   dashboard,
   onProgrammingLevelChange,
   programmingLevel,
+  subscription,
 }: {
   appUser: AppUser
   dashboard: Dashboard
   onProgrammingLevelChange: (level: SkillLevel) => Promise<void>
   programmingLevel: SkillLevel | null
+  subscription: UserSubscription | null
 }) {
   const [welcomeOpen, setWelcomeOpen] = useState(!programmingLevel)
   const [level, setLevel] = useState<SkillLevel>(programmingLevel ?? 'beginner')
-  const [language, setLanguage] = useState<ProgrammingLanguage>(programmingLanguages[0])
+  const allowedLanguageIds = useMemo(() => selectedLanguageIdsForSubscription(subscription), [subscription])
+  const languageLimit = languageLimitForSubscription(subscription)
+  const hasAllLanguages = allowedLanguageIds.length === programmingLanguages.length
+  const initialLanguage = programmingLanguages.find((item) => allowedLanguageIds.includes(item.id)) ?? programmingLanguages[0]
+  const [language, setLanguage] = useState<ProgrammingLanguage>(initialLanguage)
+  const activeLanguage = allowedLanguageIds.includes(language.id) ? language : initialLanguage
   const [subtopic, setSubtopic] = useState<ProgrammingSubtopic>(programmingSubtopics[0])
   const [questionIndex, setQuestionIndex] = useState(0)
   const [expandedProgrammingSubtopicId, setExpandedProgrammingSubtopicId] = useState<string | null>(null)
+  const [languageMessage, setLanguageMessage] = useState('')
   const workbenchRef = useRef<HTMLDivElement | null>(null)
   const activeQuestions = useMemo(() => {
     const exact = programmingQuestions.filter((item) => item.level === level && item.subtopicId === subtopic.id)
-    const languageHasFullRotation = ['python', 'javascript', 'typescript'].includes(language.id)
+    const languageHasFullRotation = ['python', 'javascript', 'typescript'].includes(activeLanguage.id)
     if (exact.length && !languageHasFullRotation) return exact.slice(0, 1)
     return exact.length ? exact : programmingQuestions.filter((item) => item.level === level)
-  }, [language.id, level, subtopic.id])
+  }, [activeLanguage.id, level, subtopic.id])
   const question = activeQuestions[questionIndex] ?? activeQuestions[0] ?? programmingQuestions[0]
   const expandedProgrammingSubtopic = programmingSubtopics.find((item) => item.id === expandedProgrammingSubtopicId) ?? null
+  const planLabel = !subscription
+    ? 'No plan'
+    : subscription.amount === 0
+      ? 'Free trial'
+      : subscription.plan === 'starter'
+        ? 'Starter Pass'
+        : 'Pro Access'
+  const languageRule = hasAllLanguages
+    ? 'Pro Access unlocks every language.'
+    : languageLimit === 1
+      ? 'Free plan allows only 1 language. Choose your favorite language.'
+      : `Starter Pass allows ${languageLimit} languages. The remaining languages stay locked.`
 
   const moveQuestion = (direction: 1 | -1) => {
     setQuestionIndex((current) => {
@@ -2835,16 +2916,31 @@ function ProgrammingDashboard({
         <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h3 className="text-xl font-black">Choose a language</h3>
-            <p className="mt-1 text-sm font-semibold text-slate-500">20 languages, each with native practice examples.</p>
+            <p className="mt-1 text-sm font-semibold text-slate-500">{languageRule}</p>
           </div>
-          <span className="rounded-full bg-white px-3 py-1 text-sm font-black text-slate-700">{level} mode</span>
+          <div className="flex flex-wrap gap-2">
+            <span className="rounded-full bg-white px-3 py-1 text-sm font-black text-slate-700">{level} mode</span>
+            <span className="rounded-full bg-teal-700 px-3 py-1 text-sm font-black text-white">{planLabel}: {allowedLanguageIds.length}/{programmingLanguages.length}</span>
+          </div>
         </div>
+        {languageMessage && <p className="mb-4 rounded-2xl bg-amber-50 p-3 text-sm font-black text-amber-800">{languageMessage}</p>}
         <div className="grid max-h-[520px] gap-3 overflow-auto pr-1 sm:grid-cols-2 xl:grid-cols-5">
-          {programmingLanguages.map((item) => (
+          {programmingLanguages.map((item) => {
+            const selected = activeLanguage.id === item.id
+            const locked = !allowedLanguageIds.includes(item.id)
+            return (
             <button
-              className={`rounded-2xl border bg-white p-4 text-left shadow-sm ${language.id === item.id ? 'border-teal-400 ring-4 ring-teal-100' : 'border-slate-100'}`}
+              aria-pressed={selected}
+              className={`rounded-2xl border bg-white p-4 text-left shadow-sm transition ${
+                selected ? 'border-teal-400 ring-4 ring-teal-100' : locked ? 'border-slate-100 opacity-60' : 'border-slate-100 hover:border-teal-200'
+              }`}
               key={item.id}
               onClick={() => {
+                if (locked) {
+                  setLanguageMessage('This language is locked on your current plan. See plans to unlock more languages.')
+                  return
+                }
+                setLanguageMessage('')
                 setLanguage(item)
                 window.setTimeout(() => workbenchRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80)
               }}
@@ -2853,45 +2949,53 @@ function ProgrammingDashboard({
                 <span className="grid size-11 place-items-center rounded-2xl bg-white text-slate-950 shadow-sm ring-1 ring-slate-200">
                   <LanguageLogo language={item} />
                 </span>
+                <span className={`grid size-6 place-items-center rounded-md border text-xs font-black ${
+                  selected ? 'border-teal-600 bg-teal-600 text-white' : locked ? 'border-slate-300 bg-slate-100 text-slate-400' : 'border-slate-300 bg-white text-slate-500'
+                }`}>
+                  {locked ? <LockKeyhole className="size-3" /> : selected ? <CheckCircle2 className="size-4" /> : ''}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <h4 className="font-black">{item.name}</h4>
                 <span className="text-xs font-black text-teal-700">{item.useCases[0]}</span>
               </div>
-              <h4 className="font-black">{item.name}</h4>
               <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-600">{item.description}</p>
-              <p className="mt-3 text-xs font-bold text-slate-500">{item.frameworks.join(' / ')}</p>
+              <p className="mt-3 text-xs font-bold text-slate-500">{locked ? 'Locked. See plans for more languages.' : item.frameworks.join(' / ')}</p>
             </button>
-          ))}
+            )
+          })}
         </div>
         <div className="mt-5 rounded-2xl border border-slate-100 bg-white p-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div>
-              <p className="text-sm font-bold uppercase tracking-[.16em] text-teal-700">{language.name} learning feed</p>
-              <h3 className="mt-1 text-2xl font-black">{language.project}</h3>
-              <p className="mt-2 max-w-4xl leading-7 text-slate-600">{language.description}</p>
+              <p className="text-sm font-bold uppercase tracking-[.16em] text-teal-700">{activeLanguage.name} learning feed</p>
+              <h3 className="mt-1 text-2xl font-black">{activeLanguage.project}</h3>
+              <p className="mt-2 max-w-4xl leading-7 text-slate-600">{activeLanguage.description}</p>
             </div>
-            <span className="rounded-full bg-slate-950 px-4 py-2 text-sm font-black text-white">{language.useCases.join(' / ')}</span>
+            <span className="rounded-full bg-slate-950 px-4 py-2 text-sm font-black text-white">{activeLanguage.useCases.join(' / ')}</span>
           </div>
           <div className="mt-4 grid gap-3 lg:grid-cols-4">
             <div className="rounded-xl bg-slate-50 p-3">
               <h4 className="font-black">Strengths</h4>
               <ul className="mt-2 space-y-1 text-sm leading-6 text-slate-600">
-                {language.strengths.map((item) => <li key={item}>{item}</li>)}
+                {activeLanguage.strengths.map((item) => <li key={item}>{item}</li>)}
               </ul>
             </div>
             <div className="rounded-xl bg-slate-50 p-3">
               <h4 className="font-black">Learn First</h4>
               <ul className="mt-2 space-y-1 text-sm leading-6 text-slate-600">
-                {language.learnFirst.map((item) => <li key={item}>{item}</li>)}
+                {activeLanguage.learnFirst.map((item) => <li key={item}>{item}</li>)}
               </ul>
             </div>
             <div className="rounded-xl bg-slate-50 p-3">
               <h4 className="font-black">Avoid</h4>
               <ul className="mt-2 space-y-1 text-sm leading-6 text-slate-600">
-                {language.pitfalls.map((item) => <li key={item}>{item}</li>)}
+                {activeLanguage.pitfalls.map((item) => <li key={item}>{item}</li>)}
               </ul>
             </div>
             <div className="rounded-xl bg-teal-50 p-3">
               <h4 className="font-black">Interview Focus</h4>
-              <p className="mt-2 text-sm leading-6 text-slate-700">{language.interviewFocus}</p>
+              <p className="mt-2 text-sm leading-6 text-slate-700">{activeLanguage.interviewFocus}</p>
             </div>
           </div>
         </div>
@@ -2901,7 +3005,7 @@ function ProgrammingDashboard({
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-sm font-bold uppercase tracking-[.16em] text-teal-700">Active programming path</p>
-            <h3 className="mt-1 text-2xl font-black">{language.name} / {subtopic.title}</h3>
+            <h3 className="mt-1 text-2xl font-black">{activeLanguage.name} / {subtopic.title}</h3>
             <p className="mt-2 leading-7 text-slate-700">
               Pick a subtopic, solve the timed challenge, then reveal the answer and explanation when the lock expires.
             </p>
@@ -2934,8 +3038,8 @@ function ProgrammingDashboard({
         <ProgrammingIde
           appUser={appUser}
           currentQuestion={Math.min(questionIndex + 1, activeQuestions.length || 1)}
-          key={`${language.id}-${level}-${question.id}`}
-          language={language}
+          key={`${activeLanguage.id}-${level}-${question.id}`}
+          language={activeLanguage}
           level={level}
           onMoveQuestion={moveQuestion}
           question={question}
@@ -2956,7 +3060,7 @@ function ProgrammingDashboard({
               <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4">
                 <div>
                   <p className="text-xs font-black uppercase tracking-[.18em] text-slate-500">Programming subtopic</p>
-                  <h2 className="text-2xl font-black">{language.name} / {expandedProgrammingSubtopic.title}</h2>
+                  <h2 className="text-2xl font-black">{activeLanguage.name} / {expandedProgrammingSubtopic.title}</h2>
                 </div>
                 <button
                   aria-label="Close subtopic"
@@ -2970,20 +3074,20 @@ function ProgrammingDashboard({
             <div className="mx-auto grid max-w-7xl gap-6 px-4 py-6 xl:grid-cols-[360px_minmax(0,1fr)]">
               <aside className="space-y-4">
                 <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                  <p className="text-sm font-bold uppercase tracking-[.16em] text-slate-500">{language.name} feed</p>
-                  <h3 className="mt-2 text-2xl font-black">{language.project}</h3>
-                  <p className="mt-3 leading-7 text-slate-700">{language.description}</p>
+                  <p className="text-sm font-bold uppercase tracking-[.16em] text-slate-500">{activeLanguage.name} feed</p>
+                  <h3 className="mt-2 text-2xl font-black">{activeLanguage.project}</h3>
+                  <p className="mt-3 leading-7 text-slate-700">{activeLanguage.description}</p>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-white p-5">
                   <h4 className="font-black">Learn First</h4>
                   <ul className="mt-3 space-y-2 text-sm font-semibold leading-6 text-slate-600">
-                    {language.learnFirst.map((item) => <li key={item}>{item}</li>)}
+                    {activeLanguage.learnFirst.map((item) => <li key={item}>{item}</li>)}
                   </ul>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-white p-5">
                   <h4 className="font-black">Avoid</h4>
                   <ul className="mt-3 space-y-2 text-sm font-semibold leading-6 text-slate-600">
-                    {language.pitfalls.map((item) => <li key={item}>{item}</li>)}
+                    {activeLanguage.pitfalls.map((item) => <li key={item}>{item}</li>)}
                   </ul>
                 </div>
               </aside>
@@ -2991,8 +3095,8 @@ function ProgrammingDashboard({
                 <ProgrammingIde
                   appUser={appUser}
                   currentQuestion={Math.min(questionIndex + 1, activeQuestions.length || 1)}
-                  key={`fullscreen-${language.id}-${level}-${question.id}`}
-                  language={language}
+                  key={`fullscreen-${activeLanguage.id}-${level}-${question.id}`}
+                  language={activeLanguage}
                   level={level}
                   onMoveQuestion={moveQuestion}
                   question={question}
@@ -3069,7 +3173,7 @@ function ProgrammingIde({
   const [revealed, setRevealed] = useState(false)
   const [output, setOutput] = useState('Console ready. Run code when you are ready.')
   const [executionStatus, setExecutionStatus] = useState<Judge0Result['status'] | 'idle' | 'running'>(judge0Configured() ? 'idle' : 'error')
-  const [executionLabel, setExecutionLabel] = useState(judge0Configured() ? 'Ready' : 'Judge0 not configured')
+  const [executionLabel, setExecutionLabel] = useState(judge0Configured() ? 'Ready' : 'Runner offline')
   const [hintOpen, setHintOpen] = useState(false)
 
   useEffect(() => {
@@ -3117,7 +3221,7 @@ function ProgrammingIde({
     setRevealed(false)
     setHintOpen(false)
     setExecutionStatus(judge0Configured() ? 'idle' : 'error')
-    setExecutionLabel(judge0Configured() ? 'Ready' : 'Judge0 not configured')
+    setExecutionLabel(judge0Configured() ? 'Ready' : 'Runner offline')
     setOutput('Reset complete. Timer restarted.')
   }
 
@@ -4332,6 +4436,7 @@ function PlanSelectionModal({
   appUser,
   dashboard,
   dashboards,
+  mode = 'required',
   onAuthOpen,
   onClose,
   onOpenDashboard,
@@ -4340,6 +4445,7 @@ function PlanSelectionModal({
   appUser: AppUser
   dashboard: Dashboard
   dashboards: Dashboard[]
+  mode?: 'required' | 'upgrade'
   onAuthOpen: () => void
   onClose: () => void
   onOpenDashboard: (dashboardId: string, message: string) => void
@@ -4347,7 +4453,7 @@ function PlanSelectionModal({
 }) {
   const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null)
   const [selectedDashboard, setSelectedDashboard] = useState(() => dashboardAccessKey(dashboard))
-  const [language, setLanguage] = useState(programmingLanguages[0]?.name ?? 'JavaScript')
+  const [language, setLanguage] = useState(programmingLanguages[0]?.id ?? 'javascript')
   const [paymentPlan, setPaymentPlan] = useState<SubscriptionPlan | null>(null)
   const [phone, setPhone] = useState('')
   const [busy, setBusy] = useState('')
@@ -4375,6 +4481,10 @@ function PlanSelectionModal({
       return
     }
     if (!validateChoice(plan)) return
+    if (!language) {
+      setMessage('Free plan allows only 1 language. Choose your favorite language first.')
+      return
+    }
     setBusy(`${plan}-trial`)
     setMessage('')
     try {
@@ -4385,7 +4495,8 @@ function PlanSelectionModal({
         language,
       })
       onSubscriptionChange(saved)
-      setMessage('Free trial started successfully. Redirecting you now...')
+      const chosenLanguage = programmingLanguages.find((item) => item.id === language)?.name ?? 'your language'
+      setMessage(`Free trial started with ${chosenLanguage}. Other languages are locked until you upgrade.`)
       onOpenDashboard(plan === 'pro' ? programmingDashboardId : starterTargetDashboardId, 'Free trial started. Redirecting you to your dashboard...')
     } catch (error) {
       const rawMessage = error instanceof Error ? error.message : 'Could not start free trial.'
@@ -4468,17 +4579,40 @@ function PlanSelectionModal({
     <Modal onClose={onClose}>
       <div className="max-h-[calc(100dvh-9rem)] overflow-y-auto pr-1">
       <p className="text-sm font-bold uppercase tracking-[.16em] text-teal-700">Choose your plan</p>
-      <h2 className="mt-2 text-2xl font-black">Plan selection is required before dashboards</h2>
-      <p className="mt-2 text-sm leading-6 text-slate-600">Plans last 1 month. New challenges added every month. Don’t miss out.</p>
+      <h2 className="mt-2 text-2xl font-black">{mode === 'upgrade' ? 'Upgrade or change your plan' : 'Plan selection is required before dashboards'}</h2>
+      <p className="mt-2 text-sm leading-6 text-slate-600">
+        {mode === 'upgrade'
+          ? 'Move from free trial to Starter or Pro, or change your active access. Pro unlocks all languages.'
+          : 'Plans last 1 month. New challenges added every month. Don’t miss out.'}
+      </p>
 
-      <div className="mt-5 grid gap-3 md:grid-cols-2">
+      <div className="mt-5 grid gap-3 md:grid-cols-[.8fr_1.2fr]">
         <select className="rounded-2xl border border-slate-200 px-4 py-3 font-bold outline-none focus:border-teal-400" onChange={(event) => setSelectedDashboard(event.target.value)} value={selectedDashboard}>
           <option value="">Select one dashboard for Starter</option>
           {dashboardOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
         </select>
-        <select className="rounded-2xl border border-slate-200 px-4 py-3 font-bold outline-none focus:border-teal-400" onChange={(event) => setLanguage(event.target.value)} value={language}>
-          {programmingLanguages.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}
-        </select>
+        <div className="rounded-2xl border border-slate-200 bg-white p-3">
+          <p className="mb-2 text-xs font-black uppercase tracking-[.14em] text-teal-700">Free trial language</p>
+          <p className="mb-3 text-sm font-bold text-slate-600">In the free plan you can only choose 1 language. Choose your favorite language.</p>
+          <div className="grid max-h-48 gap-2 overflow-auto pr-1 sm:grid-cols-2">
+            {programmingLanguages.map((item) => (
+              <label
+                className={`flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 text-sm font-black ${
+                  language === item.id ? 'border-teal-300 bg-teal-50 text-teal-900' : 'border-slate-100 bg-slate-50 text-slate-700'
+                }`}
+                key={item.id}
+              >
+                <input
+                  checked={language === item.id}
+                  className="size-4 accent-teal-600"
+                  onChange={() => setLanguage(item.id)}
+                  type="checkbox"
+                />
+                {item.name}
+              </label>
+            ))}
+          </div>
+        </div>
       </div>
 
       {paymentPlan && (

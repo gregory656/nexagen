@@ -26,9 +26,14 @@ export const Products: React.FC = () => {
 
     return (
         <div className="pb-24">
-            {/* Header */}
-            <section className="premium-gradient text-white py-32 px-6 overflow-hidden relative">
+{/* Header */}
+            <section className="nexagen-bg-overlay text-white py-32 px-6 overflow-hidden relative">
                 <div className="max-w-7xl mx-auto relative z-10">
+                    <div className="flex items-center space-x-4 mb-6">
+                        <div className="w-16 h-16 rounded-full overflow-hidden border-4 border-white/30 shadow-xl">
+                            <img src="/nexagen.jpeg" alt="NexaGen" className="w-full h-full object-cover" />
+                        </div>
+                    </div>
                     <h1 className="text-5xl md:text-7xl font-bold mb-6">Our Ecosystem</h1>
                     <p className="text-xl text-gray-200 max-w-2xl">
                         We build software that solves real campus problems. From communication to AI-driven automation, our products are the backbone of the modern student experience.

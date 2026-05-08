@@ -64,10 +64,10 @@ export const Contact: React.FC = () => {
 
     return (
         <div className="pb-24">
-            {/* Header */}
-            <section className="py-24 px-6 text-center">
-                <h1 className="text-5xl font-bold text-nexagen-dark mb-4">Get in Touch</h1>
-                <p className="text-gray-500 max-w-2xl mx-auto">
+{/* Header */}
+            <section className="nexagen-bg-overlay py-24 px-6 text-center">
+                <h1 className="text-5xl font-bold text-white mb-4">Get in Touch</h1>
+                <p className="text-gray-200 max-w-2xl mx-auto">
                     Whether you want a quote, need support, or just want to say hi, our team is ready to listen.
                 </p>
             </section>

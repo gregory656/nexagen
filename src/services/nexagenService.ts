@@ -64,6 +64,8 @@ export type UserProfile = {
   created_at: string
 }
 
+const starterLanguageAccess = ['python', 'javascript', 'typescript', 'java', 'c', 'cpp', 'csharp', 'go', 'rust', 'dart']
+
 export async function getActiveSubscription(userId: string): Promise<UserSubscription | null> {
   const { data, error } = await supabase
     .from('subscriptions')
@@ -96,7 +98,7 @@ export async function activateTestSubscription(payload: {
       user_id: payload.userId,
       plan_name: payload.plan,
       dashboard_access: payload.dashboardsAccess,
-      language_access: payload.languageAccess ?? (payload.plan === 'pro' ? ['all'] : ['javascript']),
+      language_access: payload.languageAccess ?? (payload.plan === 'pro' ? ['all'] : starterLanguageAccess),
       status: 'active',
       amount: payload.trial ? 0 : payload.plan === 'pro' ? 150 : 100,
       expires_at: expiresAt.toISOString(),

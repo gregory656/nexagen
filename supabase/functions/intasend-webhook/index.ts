@@ -45,7 +45,7 @@ Deno.serve(async (request) => {
   const planName = paymentLookup.data.plan_name === 'pro' ? 'pro' : 'starter'
   const profileLookup = await supabase.from('user_profiles').select('selected_dashboard').eq('id', resolvedUserId).maybeSingle()
   const dashboardAccess = planName === 'pro' ? ['all'] : [profileLookup.data?.selected_dashboard ?? 'piano-12-keys']
-  const languageAccess = planName === 'pro' ? ['all'] : ['javascript']
+  const languageAccess = planName === 'pro' ? ['all'] : ['python', 'javascript', 'typescript', 'java', 'c', 'cpp', 'csharp', 'go', 'rust', 'dart']
   const expiresAt = new Date()
   expiresAt.setMonth(expiresAt.getMonth() + 1)
 

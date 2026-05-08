@@ -240,3 +240,70 @@ button:disabled,
 ::-webkit-scrollbar-thumb:hover {
   background: #0A2E29;
 }
+
+/* NexaGen Image Backgrounds */
+.nexagen-bg {
+  background-image: url('/nexagen.jpeg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.nexagen-bg-fixed {
+  background-image: url('/nexagen.jpeg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+
+.nexagen-bg-overlay {
+  background-image: linear-gradient(135deg, rgba(6, 182, 212, 0.85) 0%, rgba(37, 99, 235, 0.75) 48%, rgba(124, 58, 237, 0.85) 100%),
+    url('/nexagen.jpeg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.nexagen-bg-dark-overlay {
+  background-image: linear-gradient(135deg, rgba(10, 46, 41, 0.9) 0%, rgba(30, 58, 138, 0.85) 100%),
+    url('/nexagen.jpeg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.nexagen-hero-bg {
+  background-image: linear-gradient(to bottom, rgba(26, 28, 30, 0.7) 0%, rgba(26, 28, 30, 0.85) 50%, rgba(26, 28, 30, 0.95) 100%),
+    url('/nexagen.jpeg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+
+.nexagen-card-bg {
+  background-image: url('/nexagen.jpeg');
+  background-size: cover;
+  background-position: center;
+}
+
+.nexagen-card-bg::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.7) 100%);
+  backdrop-filter: blur(8px);
+  border-radius: inherit;
+}
+
+.nexagen-pattern-overlay {
+  background-image: url('/nexagen.jpeg'), repeating-linear-gradient(45deg, transparent, transparent 35px, rgba(6, 182, 212, 0.03) 35px, rgba(6, 182, 212, 0.03) 70px);
+  background-size: 200px 200px;
+  background-position: center;
+}
+
+/* Gradient backgrounds fallback */
+.fallback-bg {
+  background: linear-gradient(135deg, #06b6d4 0%, #2563eb 48%, #7c3aed 100%);
+}
