@@ -3,8 +3,16 @@ import { supabase } from '../../lib/supabase';
 import { GlassCard } from '../../components/shared/GlassCard';
 import { DollarSign, CreditCard, Loader2 } from 'lucide-react';
 
+type Donation = {
+    id: string;
+    amount: number | string;
+    method?: string;
+    status?: string;
+    created_at: string;
+};
+
 export const AdminDonations: React.FC = () => {
-    const [donations, setDonations] = useState<any[]>([]);
+    const [donations, setDonations] = useState<Donation[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {

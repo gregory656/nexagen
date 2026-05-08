@@ -3,13 +3,17 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { MessageSquare, X, Send, Cpu } from 'lucide-react';
 import { Button } from './shared/Button';
 import { GlassCard } from './shared/GlassCard';
+import { supabase } from '../lib/supabase';
+
+type ChatMessage = { role: 'user' | 'ai'; text: string };
 
 export const GracyAI: React.FC = () => {
     const [isOpen, setIsOpen] = useState(false);
-    const [messages, setMessages] = useState<{ role: 'user' | 'ai', text: string }[]>([
+    const [messages, setMessages] = useState<ChatMessage[]>([
         { role: 'ai', text: 'Hi! I am Gracy, your NexaGen assistant. How can I help you today?' }
     ]);
     const [input, setInput] = useState('');
+    const [loading, setLoading] = useState(false);
     const scrollRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -18,23 +22,34 @@ export const GracyAI: React.FC = () => {
         }
     }, [messages]);
 
-    const handleSend = () => {
+    const handleSend = async () => {
         if (!input.trim()) return;
 
-        setMessages(prev => [...prev, { role: 'user', text: input }]);
+        const nextMessages: ChatMessage[] = [...messages, { role: 'user', text: input }];
+        setMessages(nextMessages);
         const userMsg = input.toLowerCase();
         setInput('');
+        setLoading(true);
 
-        // Basic Q&A Logic
-        setTimeout(() => {
-            let response = "I'm not sure about that, but I can help you contact Gregory Steve if you'd like!";
-            if (userMsg.includes('products')) response = "NexaGen offers Gracy Chat and GracyAI. You can find more details on our Products page!";
-            if (userMsg.includes('who are you')) response = "I'm GracyAI, the flagship AI assistant for NexaGen Technology.";
-            if (userMsg.includes('founder') || userMsg.includes('gregory')) response = "Gregory Steve is the visionary founder of NexaGen. He's passionate about campus technology!";
-            if (userMsg.includes('contact')) response = "You can reach us at nexagen656@gmail.com or via the Contact page.";
-
-            setMessages(prev => [...prev, { role: 'ai', text: response }]);
-        }, 1000);
+        try {
+            const { data, error } = await supabase.functions.invoke<{ reply?: string; error?: string }>('chat-assistant', {
+                body: {
+                    messages: nextMessages.map((message) => ({
+                        role: message.role === 'ai' ? 'assistant' : 'user',
+                        content: message.text,
+                    })),
+                },
+            });
+            if (error || data?.error) throw new Error(data?.error ?? error?.message ?? 'Chat assistant is unavailable.');
+            setMessages(prev => [...prev, { role: 'ai', text: data?.reply ?? fallbackReply(userMsg) }]);
+        } catch (error) {
+            const helper = error instanceof Error && error.message.toLowerCase().includes('openai')
+                ? 'OpenAI is not configured yet. Add OPENAI_API_KEY as a Supabase secret, then deploy the chat-assistant function.'
+                : fallbackReply(userMsg);
+            setMessages(prev => [...prev, { role: 'ai', text: helper }]);
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
@@ -72,10 +87,21 @@ export const GracyAI: React.FC = () => {
                                             ? 'bg-nexagen-blue text-white rounded-br-none'
                                             : 'bg-white text-gray-700 shadow-sm border border-gray-100 rounded-bl-none'
                                             }`}>
-                                            {m.text}
+                                            <MessageText text={m.text} />
                                         </div>
                                     </div>
                                 ))}
+                                {loading && (
+                                    <div className="flex justify-start">
+                                        <div className="rounded-2xl rounded-bl-none border border-gray-100 bg-white p-3 text-sm text-gray-500 shadow-sm">
+                                            <span className="inline-flex items-center gap-1">
+                                                <span className="h-2 w-2 animate-bounce rounded-full bg-nexagen-green" />
+                                                <span className="h-2 w-2 animate-bounce rounded-full bg-nexagen-blue [animation-delay:120ms]" />
+                                                <span className="h-2 w-2 animate-bounce rounded-full bg-nexagen-gold [animation-delay:240ms]" />
+                                            </span>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
                             {/* Input */}
@@ -86,10 +112,11 @@ export const GracyAI: React.FC = () => {
                                     className="flex-grow text-sm outline-none px-2 py-1"
                                     value={input}
                                     onChange={(e) => setInput(e.target.value)}
-                                    onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                                    onKeyDown={(e) => e.key === 'Enter' && void handleSend()}
                                 />
                                 <button
-                                    onClick={handleSend}
+                                    onClick={() => void handleSend()}
+                                    disabled={loading}
                                     className="p-2 bg-nexagen-green text-white rounded-lg hover:bg-nexagen-dark transition-colors"
                                 >
                                     <Send size={16} />
@@ -110,3 +137,21 @@ export const GracyAI: React.FC = () => {
         </div>
     );
 };
+
+function fallbackReply(userMsg: string) {
+    if (userMsg.includes('products')) return 'NexaGen offers learning dashboards, GracyAI support, coding practice, and SaaS subscription tools.';
+    if (userMsg.includes('pay') || userMsg.includes('subscription')) return 'Choose a plan, enter your M-Pesa number, approve the STK Push, and NexaGen will unlock access after confirmation.';
+    if (userMsg.includes('contact')) return 'You can reach NexaGen at nexagen656@gmail.com or use the Contact page.';
+    return 'I can help with NexaGen onboarding, subscriptions, coding practice, dashboards, and support.';
+}
+
+function MessageText({ text }: { text: string }) {
+    return (
+        <span className="whitespace-pre-wrap">
+            {text.split(/(\*\*[^*]+\*\*)/g).map((part, index) => {
+                if (part.startsWith('**') && part.endsWith('**')) return <strong key={index}>{part.slice(2, -2)}</strong>;
+                return <React.Fragment key={index}>{part}</React.Fragment>;
+            })}
+        </span>
+    );
+}

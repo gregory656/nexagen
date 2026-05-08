@@ -109,7 +109,7 @@ Deno.serve(async (request) => {
   )
 
   return json({
-    message: 'STK Push sent. Unlock will complete after payment confirmation.',
+    message: 'STK Push sent. Unlock will complete after payment verification.',
     api_ref: apiRef,
     dashboard_access: dashboardAccess,
     language_access: languageAccess,

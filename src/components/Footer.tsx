@@ -4,9 +4,9 @@ import { Code2, Laptop, Mail, MapPin, Phone, Play, Sparkles } from 'lucide-react
 
 export const Footer: React.FC = () => {
     const socialLinks = [
-        ['GitHub', Code2, 'https://github.com/'],
+        ['GitHub', Code2, 'https://github.com/gregory656'],
         ['LinkedIn', Laptop, 'https://www.linkedin.com/'],
-        ['Instagram', Sparkles, 'https://www.instagram.com/'],
+        ['Instagram', Sparkles, 'https://www.instagram.com/reddevcode'],
         ['YouTube', Play, 'https://www.youtube.com/'],
     ] as const;
 
@@ -68,7 +68,7 @@ export const Footer: React.FC = () => {
                         </div>
                         <div className="flex items-center space-x-3">
                             <Mail size={18} className="text-white" />
-                            <span>nexagen656@gmail.com</span>
+                            <span>info@nexagen.com</span>
                         </div>
                         <div className="flex items-center space-x-3">
                             <MapPin size={18} className="text-white" />

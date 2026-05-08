@@ -1,8 +1,29 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 
+type MetricRecord = {
+    id?: string;
+    name: string;
+    value: string | number;
+};
+
+type RequestRecord = {
+    id: string;
+    type: string;
+    subject: string;
+    status: string;
+    created_at: string;
+};
+
+type BookingRecord = {
+    id: string;
+    session_type: string;
+    scheduled_at: string;
+    status: string;
+};
+
 export function useMetrics() {
-    const [metrics, setMetrics] = useState<any[]>([]);
+    const [metrics, setMetrics] = useState<MetricRecord[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -18,7 +39,7 @@ export function useMetrics() {
 }
 
 export function useRequests() {
-    const [requests, setRequests] = useState<any[]>([]);
+    const [requests, setRequests] = useState<RequestRecord[]>([]);
     const [loading, setLoading] = useState(true);
 
     async function fetchRequests() {
@@ -32,7 +53,7 @@ export function useRequests() {
     }
 
     useEffect(() => {
-        fetchRequests();
+        void Promise.resolve().then(fetchRequests);
     }, []);
 
     const updateStatus = async (id: string, status: string) => {
@@ -48,7 +69,7 @@ export function useRequests() {
 }
 
 export function useBookings() {
-    const [bookings, setBookings] = useState<any[]>([]);
+    const [bookings, setBookings] = useState<BookingRecord[]>([]);
     const [loading, setLoading] = useState(true);
 
     async function fetchBookings() {
@@ -61,7 +82,7 @@ export function useBookings() {
     }
 
     useEffect(() => {
-        fetchBookings();
+        void Promise.resolve().then(fetchBookings);
     }, []);
 
     const updateStatus = async (id: string, status: string) => {

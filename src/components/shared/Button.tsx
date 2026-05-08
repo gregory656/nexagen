@@ -15,11 +15,11 @@ export const Button: React.FC<ButtonProps> = ({
     ...props
 }) => {
     const variants = {
-        primary: "bg-nexagen-green text-white hover:bg-nexagen-dark",
-        secondary: "bg-nexagen-blue text-white hover:bg-blue-900",
-        outline: "border-2 border-nexagen-green text-nexagen-green hover:bg-nexagen-green hover:text-white",
+        primary: "premium-action",
+        secondary: "premium-action-alt",
+        outline: "premium-outline-button",
         ghost: "text-nexagen-green hover:bg-nexagen-green/10",
-        gold: "bg-nexagen-gold text-nexagen-dark hover:brightness-110",
+        gold: "premium-action-success",
     };
 
     const sizes = {

@@ -3,8 +3,15 @@ import { supabase } from '../../lib/supabase';
 import { GlassCard } from '../../components/shared/GlassCard';
 import { Star, MessageCircle, Loader2 } from 'lucide-react';
 
+type Review = {
+    id: string;
+    rating: number;
+    comment?: string;
+    created_at: string;
+};
+
 export const AdminReviews: React.FC = () => {
-    const [reviews, setReviews] = useState<any[]>([]);
+    const [reviews, setReviews] = useState<Review[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {

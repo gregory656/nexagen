@@ -11,6 +11,11 @@ type UnlockResponse = {
   message?: string
 }
 
+type TrialResponse = {
+  error?: string
+  subscription?: Record<string, unknown>
+}
+
 export const TEST_MODE = true
 
 export type SongCacheRecord = {
@@ -122,27 +127,32 @@ export async function startFreeTrial(payload: {
 }): Promise<UserSubscription> {
   if (!supabaseConfigured) throw new Error('Supabase is not configured on this deployment yet.')
   const deviceFingerprint = getDeviceFingerprint()
-  const existing = await supabase.from('free_trials').select('id').eq('device_fingerprint', deviceFingerprint).maybeSingle()
-  if (existing.data?.id) throw new Error('This device has already used a free trial.')
 
-  const expiresAt = new Date()
-  expiresAt.setMonth(expiresAt.getMonth() + 1)
-  const { error } = await supabase.from('free_trials').insert({
-    device_fingerprint: deviceFingerprint,
-    user_id: payload.userId,
-    language: payload.language,
-    dashboard: payload.dashboard,
-    expires_at: expiresAt.toISOString(),
+  const { data, error } = await supabase.functions.invoke<TrialResponse>('start-free-trial', {
+    body: {
+      user_id: payload.userId,
+      plan: payload.plan,
+      dashboard: payload.dashboard === 'all' ? 'programming' : payload.dashboard,
+      language: payload.language,
+      device_fingerprint: deviceFingerprint,
+    },
   })
-  if (error) throw error
 
-  return activateTestSubscription({
-    userId: payload.userId,
-    plan: payload.plan,
-    dashboardsAccess: [payload.dashboard],
-    languageAccess: [payload.language],
-    trial: true,
-  })
+  if (error) {
+    const response = 'context' in error ? error.context : null
+    if (response instanceof Response) {
+      const body = (await response.json().catch(() => null)) as TrialResponse | null
+      if (body?.error) throw new Error(body.error)
+    }
+    throw new Error(error.message.toLowerCase().includes('failed to send')
+      ? 'The start-free-trial Edge Function is not deployed yet. Deploy it to Supabase, then try Free Trial again.'
+      : error.message)
+  }
+
+  if (data?.error) throw new Error(data.error)
+  const normalized = normalizeSubscription(data?.subscription ?? null)
+  if (!normalized) throw new Error('Could not start free trial.')
+  return normalized
 }
 
 export async function getUserProfile(userId: string): Promise<UserProfile | null> {

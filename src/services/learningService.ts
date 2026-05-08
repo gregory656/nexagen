@@ -40,26 +40,14 @@ export async function askLearningAssistant(intent: AssistantIntent, context: Ass
     'Keep the answer short, practical, and encouraging.',
   ].filter(Boolean).join('\n')
 
-  const apiKey = import.meta.env.VITE_OPENAI_API_KEY as string | undefined
-  const model = (import.meta.env.VITE_OPENAI_MODEL as string | undefined) ?? 'gpt-4.1-mini'
-
-  if (!apiKey) return fallbackAssistantAnswer(intent, context)
-
   try {
-    const response = await fetch('https://api.openai.com/v1/responses', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
+    const { data, error } = await supabase.functions.invoke<{ reply?: string; error?: string }>('chat-assistant', {
+      body: {
+        messages: [{ role: 'user', content: prompt }],
       },
-      body: JSON.stringify({
-        model,
-        input: prompt,
-        max_output_tokens: 220,
-      }),
     })
-    const data = await response.json()
-    return data.output_text ?? fallbackAssistantAnswer(intent, context)
+    if (error || data?.error) return fallbackAssistantAnswer(intent, context)
+    return data?.reply ?? fallbackAssistantAnswer(intent, context)
   } catch {
     return fallbackAssistantAnswer(intent, context)
   }

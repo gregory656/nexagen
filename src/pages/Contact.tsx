@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Send, Mail, Phone, MapPin, CheckCircle2, AlertCircle } from 'lucide-react';
 import { Button } from '../components/shared/Button';
 import { GlassCard } from '../components/shared/GlassCard';
 import { supabase } from '../lib/supabase';
+import { sendContactEmail } from '../services/emailService';
 
 export const Contact: React.FC = () => {
     const [formData, setFormData] = useState({
@@ -12,13 +13,33 @@ export const Contact: React.FC = () => {
         subject: '',
         message: ''
     });
+    const [website, setWebsite] = useState('');
+    const [feedback, setFeedback] = useState('');
+    const mountedAt = useRef(0);
     const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+
+    useEffect(() => {
+        mountedAt.current = Date.now();
+    }, []);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        setFeedback('');
+        if (website) return;
+        if (Date.now() - mountedAt.current < 1200) {
+            setStatus('error');
+            setFeedback('Please try again in a moment.');
+            return;
+        }
+        if (!/^\S+@\S+\.\S+$/.test(formData.email)) {
+            setStatus('error');
+            setFeedback('Enter a valid email address.');
+            return;
+        }
         setStatus('loading');
 
         try {
+            await sendContactEmail(formData);
             const { error } = await supabase
                 .from('requests')
                 .insert([
@@ -33,9 +54,11 @@ export const Contact: React.FC = () => {
             if (error) throw error;
             setStatus('success');
             setFormData({ name: '', email: '', type: 'general', subject: '', message: '' });
+            setFeedback('Message sent successfully.');
         } catch (err) {
             console.error(err);
             setStatus('error');
+            setFeedback(err instanceof Error ? err.message : 'Failed to send message. Please try again.');
         }
     };
 
@@ -116,6 +139,13 @@ export const Contact: React.FC = () => {
                             </div>
                         ) : (
                             <form onSubmit={handleSubmit} className="space-y-6">
+                                <input
+                                    className="hidden"
+                                    tabIndex={-1}
+                                    value={website}
+                                    onChange={(e) => setWebsite(e.target.value)}
+                                    autoComplete="off"
+                                />
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     <div className="space-y-2">
                                         <label className="text-sm font-bold text-gray-700">Full Name</label>
@@ -183,7 +213,7 @@ export const Contact: React.FC = () => {
                                 {status === 'error' && (
                                     <div className="flex items-center space-x-2 text-red-500 bg-red-50 p-4 rounded-xl">
                                         <AlertCircle size={20} />
-                                        <span>Failed to send message. Please try again.</span>
+                                        <span>{feedback || 'Failed to send message. Please try again.'}</span>
                                     </div>
                                 )}
 

@@ -72,6 +72,8 @@ import {
 } from './data/programmingContent'
 import { useDebouncedValue } from './hooks/useDebouncedValue'
 import { supabase, supabaseConfigured } from './lib/supabase'
+import { sendContactEmail } from './services/emailService'
+import { executeJudge0, judge0Configured, type Judge0Result } from './services/judge0Service'
 import {
   askLearningAssistant,
   awardXp,
@@ -180,7 +182,8 @@ const dashboardAccessKey = (dashboard: Dashboard) => {
 const dashboardIsSubscriptionUnlocked = (dashboard: Dashboard, subscription: UserSubscription | null) => {
   if (!subscription) return false
   if (new Date(subscription.expires_at).getTime() <= Date.now()) return false
-  if (subscription.plan === 'pro' || subscription.dashboards_access.includes('all')) return availableDashboardSlugs.includes(dashboardAccessKey(dashboard))
+  const isTrial = subscription.amount === 0
+  if (!isTrial && (subscription.plan === 'pro' || subscription.dashboards_access.includes('all'))) return availableDashboardSlugs.includes(dashboardAccessKey(dashboard))
   return subscription.dashboards_access.includes(dashboardAccessKey(dashboard))
 }
 
@@ -348,6 +351,7 @@ function App() {
   }, [])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setBootLoading(true)
     setBootError('')
     Promise.all([getDashboards(), getContentItems(), getSubtopics()])
@@ -363,6 +367,7 @@ function App() {
 
   useEffect(() => {
     if (!appUser.user) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setUnlocks([])
       setSubtopicUnlocks(TEST_MODE ? subtopics.map((subtopic) => subtopic.id) : [])
       setCompleted([])
@@ -816,65 +821,67 @@ function LandingShell(props: LandingShellProps) {
         selectedSubtopics={selectedSubtopics}
       />
 
-      <section className="relative overflow-hidden px-4 py-10 md:py-14">
+      <section className="relative overflow-hidden px-4 py-14 md:py-20">
         <div className="absolute inset-0 -z-10 bg-[linear-gradient(120deg,#f8fbff_0%,#eefdf8_45%,#fff7ed_100%)]" />
-        <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[.9fr_1.1fr]">
-          <div className="self-center">
-            <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-teal-100 bg-white/70 px-4 py-2 text-sm font-bold text-teal-700 shadow-sm">
+        <div className="mx-auto grid max-w-7xl gap-10 lg:grid-cols-[1fr_.82fr] lg:items-center">
+          <div className="self-center text-center lg:text-left">
+            <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-teal-100 bg-white/70 px-4 py-2 text-sm font-bold text-teal-700">
               <ShieldCheck className="size-4" />
               Tech, music, practice, progress
             </p>
-            <h1 className="max-w-3xl text-5xl font-black leading-[1.02] text-slate-950 md:text-7xl">Master Tech + Music in One Place</h1>
-            <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-600">
+            <h1 className="mx-auto max-w-3xl text-5xl font-black leading-[1.02] text-slate-950 md:text-7xl lg:mx-0">Master Tech + Music in One Place</h1>
+            <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-slate-600 lg:mx-0">
               NexaGen blends piano fluency, programming foundations, operating systems, troubleshooting, and guided Q&A into one calm learning ecosystem.
             </p>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <a className="rounded-full bg-slate-950 px-6 py-3 font-bold text-white shadow-xl" href="#dashboards">
+            <div className="mt-8 flex flex-wrap justify-center gap-3 lg:justify-start">
+              <a className="premium-action px-6 py-3" href="#dashboards">
                 Explore dashboards
               </a>
-              <button className="rounded-full border border-slate-200 bg-white px-6 py-3 font-bold text-slate-800 shadow-sm" onClick={saveProgress}>
+              <button className="premium-outline-button px-6 py-3" onClick={saveProgress}>
                 Save progress
               </button>
             </div>
             {progressMessage && <p className="mt-4 rounded-2xl bg-teal-50 p-4 text-sm font-black text-teal-800 shadow-sm">{progressMessage}</p>}
           </div>
-          <div className="grid gap-4 sm:grid-cols-3">
-            {visuals.map((src, index) => (
-              <motion.img
-                alt=""
-                animate={{ y: index % 2 ? 18 : -12 }}
-                className="blur-load h-72 w-full rounded-[1.5rem] object-cover shadow-2xl shadow-slate-200"
-                decoding="async"
-                fetchPriority={index === 0 ? 'high' : 'auto'}
-                key={src}
-                loading={index === 0 ? 'eager' : 'lazy'}
-                sizes={imageSizes}
-                src={src}
-                transition={{ duration: 3 + index, repeat: Infinity, repeatType: 'reverse', ease: 'easeInOut' }}
-              />
-            ))}
+          <div className="relative">
+            <img
+              alt=""
+              className="blur-load h-[420px] w-full rounded-[1.5rem] object-cover shadow-xl shadow-slate-200/70"
+              decoding="async"
+              fetchPriority="high"
+              sizes={imageSizes}
+              src={visuals[1]}
+            />
+            <div className="absolute inset-x-6 bottom-6 rounded-2xl bg-white/85 p-4 text-sm font-bold text-slate-700 shadow-lg backdrop-blur-md">
+              Learn, practice, run code, and unlock focused dashboards from one clean workspace.
+            </div>
           </div>
         </div>
       </section>
 
       <GlobalSearch dashboards={dashboards} content={content} onOpenDashboard={openDashboardWorkspace} songs={songProgressions} subtopics={subtopics} />
       <ExploreDashboards dashboards={dashboards} onSelected={openDashboardWorkspace} selectedDashboard={selectedDashboard} unlocks={effectiveUnlocks} />
-      <SongLandingPlayer />
       {appUser.user ? (
         <PersonalizedHome completed={completed} content={content} dashboards={dashboards} onOpenDashboard={openDashboardWorkspace} subtopics={subtopics} />
       ) : (
         <ContentFeed />
       )}
+      <details className="mx-auto max-w-7xl px-4 py-6">
+        <summary className="cursor-pointer border-y border-slate-200 py-5 text-center text-sm font-black uppercase tracking-[.16em] text-teal-700">
+          Music practice demos
+        </summary>
+        <SongLandingPlayer />
+        <SongPracticeLibrary />
+      </details>
       <DailyChallenge appUser={appUser} onOpenDashboard={openDashboardWorkspace} dashboards={dashboards} />
       <ProgrammingValueSection />
       <SaasPricingSection
         subscription={subscription}
       />
-      <SongPracticeLibrary />
       <LaunchTrustSections appUser={appUser} />
       <ValueSections />
 
-      <section className="mx-auto grid max-w-7xl gap-6 px-4 py-8 lg:grid-cols-[.8fr_1.2fr]" id="dashboards">
+      <section className="mx-auto grid max-w-7xl gap-8 px-4 py-14 lg:grid-cols-[.8fr_1.2fr]" id="dashboards">
         <div>
           <div className="mb-4 flex items-center justify-between gap-3">
             <h2 className="text-2xl font-black">Dashboards</h2>
@@ -888,7 +895,7 @@ function LandingShell(props: LandingShellProps) {
               const isUnlocked = !dashboard.is_locked || effectiveUnlocks.includes(dashboard.id)
               return (
                 <button
-                  className={`rounded-2xl border bg-white p-5 text-left shadow-sm transition hover:-translate-y-1 hover:shadow-xl ${
+                  className={`rounded-2xl border bg-white p-5 text-left shadow-sm transition hover:-translate-y-1 hover:shadow-md ${
                     selectedDashboard?.id === dashboard.id ? 'border-teal-400 ring-4 ring-teal-100' : 'border-slate-100'
                   }`}
                   key={dashboard.id}
@@ -911,7 +918,7 @@ function LandingShell(props: LandingShellProps) {
           </div>
         </div>
 
-        <div className="rounded-[1.5rem] border border-slate-100 bg-white p-6 shadow-xl shadow-slate-200/70">
+        <div className="rounded-[1.5rem] border border-slate-100 bg-white p-6 shadow-sm">
           <p className="text-sm font-bold uppercase tracking-[.16em] text-teal-700">Workspace preview</p>
           <h2 className="mt-2 text-3xl font-black">{selectedDashboard?.title ?? 'Choose a dashboard'}</h2>
           <p className="mt-3 leading-7 text-slate-600">
@@ -919,7 +926,7 @@ function LandingShell(props: LandingShellProps) {
           </p>
           <p className="mt-2 text-sm font-bold text-slate-500">{selectedContent.length} content items ready in the selected dashboard.</p>
           {selectedDashboard && (
-            <button className="mt-5 rounded-full bg-slate-950 px-5 py-3 text-sm font-bold text-white" onClick={() => openDashboardWorkspace(selectedDashboard.id)}>
+            <button className="premium-action mt-5 px-5 py-3 text-sm" onClick={() => openDashboardWorkspace(selectedDashboard.id)}>
               Open full-screen dashboard
             </button>
           )}
@@ -1000,9 +1007,9 @@ function LandingShell(props: LandingShellProps) {
             <h3 className="font-black">Social Links</h3>
             <div className="mt-4 flex flex-wrap gap-2">
               {[
-                ['GitHub', Code2, 'https://github.com/'],
+                ['GitHub', Code2, 'https://github.com/gregory656'],
                 ['LinkedIn', Laptop, 'https://www.linkedin.com/'],
-                ['Instagram', Sparkles, 'https://www.instagram.com/'],
+                ['Instagram', Sparkles, 'https://www.instagram.com/reddevcode'],
                 ['YouTube', Play, 'https://www.youtube.com/'],
               ].map(([label, Icon, href]) => (
                 <a
@@ -1026,7 +1033,7 @@ function LandingShell(props: LandingShellProps) {
             <a href="#dashboards">Quick navigation</a>
             <a href="#pricing">Pricing</a>
             <a href="#support">Support</a>
-            <span>Terms & Privacy placeholders</span>
+            <span>Terms & Privacy </span>
             <span>Powered by GracyAI</span>
           </span>
         </div>
@@ -1966,7 +1973,7 @@ function SongLandingPlayer() {
               </button>
             </div>
             <p className="mt-3 text-sm font-semibold text-slate-500">
-              Browsers may wait for your first tap before allowing sound, so this player is ready the moment the visitor interacts.
+              Browsers may wait for your first tap before allowing sound, so this player is ready the moment you interact.
             </p>
           </div>
 
@@ -2059,23 +2066,25 @@ function SaasPricingSection({ subscription }: { subscription: UserSubscription |
   ]
 
   return (
-    <section className="mx-auto max-w-7xl px-4 py-12" id="pricing">
-      <div className="mb-7 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <div>
+    <section className="mx-auto max-w-7xl px-4 py-16" id="pricing">
+      <div className="mx-auto mb-10 max-w-3xl text-center">
           <p className="text-sm font-bold uppercase tracking-[.16em] text-teal-700">SaaS Access</p>
           <h2 className="mt-2 text-3xl font-black">Simple monthly plans</h2>
-          <p className="mt-3 max-w-2xl leading-7 text-slate-600">New challenges every month. Endless questions. Continuous growth.</p>
-        </div>
-        <span className="rounded-full border border-teal-100 bg-white px-4 py-2 text-sm font-black text-teal-800 shadow-sm">{activePlan}</span>
+          <p className="mt-3 leading-7 text-slate-600">New challenges every month. Endless questions. Continuous growth.</p>
+        <span className="mt-5 inline-flex rounded-full border border-teal-100 bg-white px-4 py-2 text-sm font-black text-teal-800">{activePlan}</span>
       </div>
 
       <div className="grid gap-5 lg:grid-cols-2">
         {plans.map((item) => {
           const PlanIcon = item.icon
           return (
-          <div className="relative overflow-hidden rounded-[1.5rem] border border-white bg-white p-6 shadow-xl shadow-slate-200/80" key={item.name}>
-            {item.plan === 'pro' && <span className="absolute right-5 top-5 rounded-full bg-amber-100 px-3 py-1 text-xs font-black text-amber-800">Best Value</span>}
-            <div className={`mb-5 grid size-14 place-items-center rounded-2xl bg-gradient-to-br ${item.accent} text-white shadow-lg`}>
+          <div className={`relative overflow-hidden rounded-[1.5rem] border bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-md ${item.plan === 'pro' ? 'border-amber-200' : 'border-slate-100'}`} key={item.name}>
+            {item.plan === 'pro' && (
+              <span className="pro-savings-badge absolute right-5 top-5 rounded-full px-3 py-1 text-xs font-black text-amber-900">
+                Save KES 50 with Pro Access
+              </span>
+            )}
+            <div className={`mb-5 grid size-14 place-items-center rounded-2xl bg-gradient-to-br ${item.accent} text-white shadow-sm`}>
               <PlanIcon className={`size-7 ${item.iconClass}`} />
             </div>
             <h3 className="text-2xl font-black">{item.name}</h3>
@@ -2105,27 +2114,27 @@ function LaunchTrustSections({ appUser }: { appUser: AppUser }) {
   ]
 
   return (
-    <section className="mx-auto max-w-7xl px-4 py-12">
-      <div className="grid gap-6 lg:grid-cols-[.9fr_1.1fr]">
-        <div className="rounded-[1.5rem] border border-teal-100 bg-gradient-to-br from-white via-teal-50 to-amber-50 p-6 shadow-xl shadow-slate-200/70">
+    <section className="mx-auto max-w-7xl px-4 py-16">
+      <div className="grid gap-12 lg:grid-cols-[.9fr_1.1fr]">
+        <div>
           <p className="text-sm font-bold uppercase tracking-[.16em] text-teal-700">Certifications</p>
           <h2 className="mt-2 text-3xl font-black">Certifications Coming Soon</h2>
-          <div className="mt-6 rounded-2xl border-4 border-double border-teal-700 bg-white p-6 text-center shadow-inner">
+          <div className="mt-6 border-y border-teal-100 bg-teal-50/50 p-6 text-center">
             <BadgeCheck className="mx-auto size-14 text-teal-700" />
             <h3 className="mt-3 text-2xl font-black">NexaGen Certificate</h3>
             <p className="mt-2 text-sm font-bold text-slate-500">Official certifications are currently in development with our partners.</p>
           </div>
-          <p className="mt-5 rounded-2xl bg-white/80 p-4 text-sm font-bold text-slate-700">NexaGen is a licensed business operating under registered compliance.</p>
+          <p className="mt-5 text-sm font-bold text-slate-700">NexaGen is a licensed business operating under registered compliance.</p>
         </div>
 
-        <div className="rounded-[1.5rem] border border-slate-100 bg-white p-6 shadow-xl shadow-slate-200/70">
+        <div>
           <p className="text-sm font-bold uppercase tracking-[.16em] text-teal-700">Partners and stakeholders</p>
           <h2 className="mt-2 text-3xl font-black">Built with launch credibility in mind</h2>
-          <div className="mt-6 grid gap-3 sm:grid-cols-2">
+          <div className="mt-6 grid gap-x-8 gap-y-5 sm:grid-cols-2">
             {partners.map(([name, description]) => (
-              <div className="group rounded-2xl border border-slate-100 bg-slate-50 p-4 transition hover:-translate-y-1 hover:bg-white hover:shadow-lg" key={name}>
+              <div className="group border-t border-slate-200 pt-4 transition hover:border-teal-300" key={name}>
                 <div className="flex items-center gap-3">
-                  <span className="grid size-12 place-items-center rounded-2xl bg-white text-slate-950 shadow-sm ring-1 ring-slate-200">
+                  <span className="grid size-11 place-items-center rounded-2xl bg-white text-slate-950 ring-1 ring-slate-200">
                     <PartnerLogo name={name} />
                   </span>
                   <h3 className="font-black">{name}</h3>
@@ -2147,8 +2156,48 @@ function LaunchTrustSections({ appUser }: { appUser: AppUser }) {
 }
 
 function ContactLaunchCard() {
+  const [form, setForm] = useState({ name: '', email: '', message: '', website: '' })
+  const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
+  const [message, setMessage] = useState('')
+  const mountedAt = useRef(0)
+
+  useEffect(() => {
+    mountedAt.current = Date.now()
+  }, [])
+
+  const submit = async () => {
+    if (form.website) return
+    if (Date.now() - mountedAt.current < 1200) {
+      setStatus('error')
+      setMessage('Please try again in a moment.')
+      return
+    }
+    if (!form.name.trim() || !/^\S+@\S+\.\S+$/.test(form.email) || !form.message.trim()) {
+      setStatus('error')
+      setMessage('Enter your name, a valid email, and a message.')
+      return
+    }
+    setStatus('loading')
+    setMessage('')
+    try {
+      await sendContactEmail({
+        name: form.name,
+        email: form.email,
+        type: 'landing-contact',
+        subject: 'NexaGen landing page contact',
+        message: form.message,
+      })
+      setStatus('success')
+      setMessage('Message sent. We will get back to you soon.')
+      setForm({ name: '', email: '', message: '', website: '' })
+    } catch (error) {
+      setStatus('error')
+      setMessage(error instanceof Error ? error.message : 'Could not send message right now.')
+    }
+  }
+
   return (
-    <div className="rounded-[1.5rem] border border-slate-100 bg-white p-5 shadow-xl shadow-slate-200/70">
+    <div className="rounded-[1.25rem] border border-slate-100 bg-white p-5 shadow-sm">
       <Mail className="size-7 text-teal-700" />
       <h3 className="mt-3 text-xl font-black">Contact NexaGen</h3>
       <a className="mt-4 flex items-center gap-2 rounded-2xl bg-teal-50 px-4 py-3 font-bold text-teal-800" href="https://wa.me/254719637416" rel="noreferrer" target="_blank">
@@ -2156,13 +2205,19 @@ function ContactLaunchCard() {
         +254 719 637 416
       </a>
       <div className="mt-4 grid gap-3">
-        <input className="rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-teal-400" placeholder="Name" />
-        <input className="rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-teal-400" placeholder="Email" />
-        <textarea className="min-h-24 rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-teal-400" placeholder="Message" />
-        <button className="inline-flex items-center justify-center gap-2 rounded-full bg-slate-950 px-5 py-3 font-black text-white">
-          <Send className="size-4" />
-          EmailJS Placeholder
+        <input className="hidden" onChange={(event) => setForm({ ...form, website: event.target.value })} tabIndex={-1} value={form.website} />
+        <input className="rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-teal-400" onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Name" value={form.name} />
+        <input className="rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-teal-400" onChange={(event) => setForm({ ...form, email: event.target.value })} placeholder="Email" value={form.email} />
+        <textarea className="min-h-24 rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-teal-400" onChange={(event) => setForm({ ...form, message: event.target.value })} placeholder="Message" value={form.message} />
+        <button className="premium-action px-5 py-3" disabled={status === 'loading'} onClick={() => void submit()}>
+          {status === 'loading' ? <Sparkles className="size-4 animate-spin" /> : <Send className="size-4" />}
+          {status === 'loading' ? 'Sending...' : 'Send'}
         </button>
+        {message && (
+          <p className={`rounded-2xl p-3 text-sm font-bold ${status === 'success' ? 'bg-emerald-50 text-emerald-800' : 'bg-rose-50 text-rose-800'}`}>
+            {message}
+          </p>
+        )}
       </div>
     </div>
   )
@@ -2170,11 +2225,11 @@ function ContactLaunchCard() {
 
 function SupportLaunchCard() {
   return (
-    <div className="rounded-[1.5rem] border border-slate-100 bg-white p-5 shadow-xl shadow-slate-200/70">
+    <div className="rounded-[1.25rem] border border-slate-100 bg-white p-5 shadow-sm">
       <Coffee className="size-7 text-amber-700" />
       <h3 className="mt-3 text-xl font-black">Support the Team</h3>
       <p className="mt-3 leading-7 text-slate-600">Buy the developers and engineers a coffee.</p>
-      <button className="mt-5 w-full rounded-full bg-amber-500 px-5 py-3 font-black text-slate-950 shadow-lg">Future payment button</button>
+      <button className="premium-action-alt mt-5 w-full px-5 py-3">Support Us</button>
       <div className="mt-6 rounded-2xl bg-slate-50 p-4">
         <HeartHandshake className="size-6 text-teal-700" />
         <h4 className="mt-2 font-black">Work With Us</h4>
@@ -2200,7 +2255,7 @@ function RatingLaunchCard({ userId }: { userId?: string }) {
   }
 
   return (
-    <div className="rounded-[1.5rem] border border-slate-100 bg-white p-5 shadow-xl shadow-slate-200/70">
+    <div className="rounded-[1.25rem] border border-slate-100 bg-white p-5 shadow-sm">
       <Star className="size-7 text-amber-500" />
       <h3 className="mt-3 text-xl font-black">Rate NexaGen</h3>
       <div className="mt-4 flex gap-2">
@@ -2255,22 +2310,20 @@ function ContentFeed() {
   ]
 
   return (
-    <section className="mx-auto max-w-7xl px-4 py-10">
-      <div className="mb-6 flex items-end justify-between gap-4">
-        <div>
+    <section className="mx-auto max-w-5xl px-4 py-16">
+      <div className="mb-10 text-center">
           <p className="text-sm font-bold uppercase tracking-[.16em] text-teal-700">Learning hub</p>
-          <h2 className="mt-2 text-3xl font-black">Daily content feed</h2>
-        </div>
-        <span className="hidden rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 shadow-sm sm:inline">Expandable reads</span>
+          <h2 className="mt-2 text-3xl font-black">A simpler path into practical learning</h2>
+          <p className="mx-auto mt-3 max-w-2xl leading-7 text-slate-600">Start with the area that matters today, then move naturally into practice, progress, and deeper dashboard work.</p>
       </div>
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="divide-y divide-slate-200 border-y border-slate-200">
         {blocks.map(([title, copy]) => (
-          <details className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm open:shadow-xl" key={title}>
-            <summary className="flex items-center justify-between gap-4 text-left text-lg font-black">
+          <details className="group py-5" key={title}>
+            <summary className="flex items-center justify-between gap-4 text-left text-lg font-black transition hover:text-teal-700">
               {title}
-              <ChevronDown className="size-5 shrink-0" />
+              <ChevronDown className="size-5 shrink-0 transition group-open:rotate-180" />
             </summary>
-            <p className="mt-4 leading-7 text-slate-600">{copy}</p>
+            <p className="mt-3 max-w-3xl leading-7 text-slate-600">{copy}</p>
           </details>
         ))}
       </div>
@@ -2280,38 +2333,42 @@ function ContentFeed() {
 
 function ProgrammingValueSection() {
   return (
-    <section className="mx-auto max-w-7xl px-4 py-10">
-      <div className="rounded-[1.5rem] border border-slate-100 bg-white p-5 shadow-xl shadow-slate-200/60 md:p-7">
+    <section className="mx-auto max-w-7xl px-4 py-16">
+      <div className="mx-auto max-w-3xl text-center">
         <p className="text-sm font-bold uppercase tracking-[.16em] text-teal-700">Why Learn Programming with NexaGen?</p>
         <h2 className="mt-2 text-3xl font-black">Practice like interviews are coming</h2>
-        <div className="mt-5 grid gap-4 md:grid-cols-4">
+      </div>
+        <div className="mt-10 grid gap-6 md:grid-cols-4">
           {[
             ['Timed pressure', 'Reveal logic trains recall before comfort takes over.'],
             ['Real editor', 'Monaco gives a focused VS Code-style coding surface.'],
             ['Language range', 'Compare syntax and concepts across 20 languages.'],
             ['Progress loops', 'Attempts, completions, time, and language use feed analytics.'],
           ].map(([title, copy]) => (
-            <div className="rounded-2xl bg-slate-50 p-4" key={title}>
+            <div className="border-t border-slate-200 pt-5" key={title}>
               <h3 className="font-black">{title}</h3>
               <p className="mt-2 text-sm leading-6 text-slate-600">{copy}</p>
             </div>
           ))}
         </div>
-      </div>
     </section>
   )
 }
 
 function ValueSections() {
   return (
-    <section className="border-y border-slate-200 bg-white px-4 py-12">
-      <div className="mx-auto grid max-w-7xl gap-5 md:grid-cols-3">
+    <section className="border-y border-slate-200 bg-white px-4 py-16">
+      <div className="mx-auto mb-10 max-w-3xl text-center">
+        <p className="text-sm font-bold uppercase tracking-[.16em] text-teal-700">FAQ</p>
+        <h2 className="mt-2 text-3xl font-black">Why NexaGen?</h2>
+      </div>
+      <div className="mx-auto grid max-w-6xl gap-8 md:grid-cols-3">
         {[
-          ['Why KES 100?', 'Each paid subtopic is priced like a focused mini-class: clear Q&A, practice prompts, progress, and a path to the next skill.'],
+          ['Why NexaGen?', 'Each paid subtopic is priced like a focused mini-class: clear Q&A, practice prompts, progress, and a path to the next skill.'],
           ['What You Gain', 'You get structured learning, real practice tools, level detection, PDF-ready content fields, and a library that can keep expanding.'],
           ['Real Outcomes', 'Understand all 12 keys, build code confidence, solve computer basics faster, and track what you have actually completed.'],
         ].map(([title, copy]) => (
-          <div className="rounded-2xl border border-slate-100 bg-slate-50 p-5" key={title}>
+          <div className="border-l-2 border-teal-200 pl-5" key={title}>
             <h3 className="text-xl font-black">{title}</h3>
             <p className="mt-3 leading-7 text-slate-600">{copy}</p>
           </div>
@@ -2398,7 +2455,7 @@ function HowItWorks({
             <p className="text-sm font-bold uppercase tracking-[.16em] text-teal-300">Learning operating system</p>
             <h2 className="mt-3 max-w-3xl text-4xl font-black leading-tight md:text-5xl">How NexaGen Works</h2>
             <p className="mt-4 max-w-3xl leading-8 text-slate-300">
-              NexaGen now behaves like a real learning system: it controls access, structures knowledge, creates practice paths,
+              NexaGen is a real learning system: it controls access, structures knowledge, creates practice paths,
               and turns every completed Q&A, piano drill, visual pattern, and song progression into trackable progress.
             </p>
           </div>
@@ -2493,7 +2550,7 @@ function HowItWorks({
             <div className="mt-6 rounded-2xl bg-teal-50 p-4">
               <h4 className="font-black text-teal-900">What this means</h4>
               <p className="mt-2 leading-7 text-teal-800">
-                The UI is no longer only a showcase. It now explains the product logic, exposes learner state, and prepares the app for stronger analytics, streaks, recommendations, and payment-linked unlock history.
+                Happy Learning
               </p>
             </div>
           </div>
@@ -3011,6 +3068,8 @@ function ProgrammingIde({
   const [secondsLeft, setSecondsLeft] = useState(initialSeconds)
   const [revealed, setRevealed] = useState(false)
   const [output, setOutput] = useState('Console ready. Run code when you are ready.')
+  const [executionStatus, setExecutionStatus] = useState<Judge0Result['status'] | 'idle' | 'running'>(judge0Configured() ? 'idle' : 'error')
+  const [executionLabel, setExecutionLabel] = useState(judge0Configured() ? 'Ready' : 'Judge0 not configured')
   const [hintOpen, setHintOpen] = useState(false)
 
   useEffect(() => {
@@ -3031,23 +3090,13 @@ function ProgrammingIde({
   const runCode = async () => {
     rememberProgrammingLanguage(language.name)
     await trackUserActivity({ userId: appUser.user?.id, action: 'programming_question_attempted' })
-    setOutput('Running through execution adapter...')
-    const apiUrl = import.meta.env.VITE_JUDGE0_URL as string | undefined
-    if (!apiUrl) {
-      setOutput('Execution API is not configured yet. Your code is saved in the editor; connect Judge0 with VITE_JUDGE0_URL to run remotely.')
-      return
-    }
-    try {
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ language: language.id, source_code: code }),
-      })
-      const data = await response.json()
-      setOutput(data.stdout ?? data.stderr ?? data.message ?? 'Execution finished.')
-    } catch (error) {
-      setOutput(error instanceof Error ? `Execution service failed softly: ${error.message}` : 'Execution service failed softly.')
-    }
+    setExecutionStatus('running')
+    setExecutionLabel('Running code')
+    setOutput('Submitting code to Judge0...')
+    const result = await executeJudge0(language, code)
+    setExecutionStatus(result.status)
+    setExecutionLabel(result.statusText)
+    setOutput(result.output)
   }
 
   const complete = async () => {
@@ -3067,6 +3116,8 @@ function ProgrammingIde({
     setSecondsLeft(initialSeconds)
     setRevealed(false)
     setHintOpen(false)
+    setExecutionStatus(judge0Configured() ? 'idle' : 'error')
+    setExecutionLabel(judge0Configured() ? 'Ready' : 'Judge0 not configured')
     setOutput('Reset complete. Timer restarted.')
   }
 
@@ -3090,14 +3141,33 @@ function ProgrammingIde({
         <CodeEditor height="clamp(320px, 55vh, 520px)" language={language.monaco} onChange={(value) => setCode(value ?? '')} value={code} options={{ minimap: { enabled: false }, fontSize: 14, wordWrap: 'on' }} />
       </div>
       <div className="mt-4 flex flex-wrap gap-2">
-        <button className="rounded-full bg-slate-950 px-4 py-2 text-sm font-bold text-white" onClick={runCode}>Run code</button>
-        <button className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700" onClick={reset}>Try Again</button>
+        <button className="premium-action px-4 py-2 text-sm" disabled={executionStatus === 'running'} onClick={runCode}>
+          {executionStatus === 'running' ? <Sparkles className="size-4 animate-spin" /> : <Play className="size-4" />}
+          {executionStatus === 'running' ? 'Executing...' : 'Run Code'}
+        </button>
+        <button className="premium-outline-button px-4 py-2 text-sm" onClick={reset}>Try Again</button>
         <button className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700" onClick={() => setHintOpen(!hintOpen)}>Show Hint</button>
         <button className="ripple rounded-full bg-teal-700 px-4 py-2 text-sm font-bold text-white" onClick={complete}>Start Challenge</button>
-        <button className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700" onClick={() => onMoveQuestion(-1)}>Previous</button>
-        <button className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700" onClick={() => onMoveQuestion(1)}>Next challenge</button>
+        <button className="premium-outline-button px-4 py-2 text-sm" onClick={() => onMoveQuestion(-1)}>Previous</button>
+        <button className="premium-action-alt px-4 py-2 text-sm" onClick={() => onMoveQuestion(1)}>Next</button>
       </div>
-      <div className="mt-4 rounded-2xl bg-slate-950 p-4 font-mono text-sm leading-6 text-slate-100">{output}</div>
+      <div className="mt-4 overflow-hidden rounded-2xl border border-slate-800 bg-slate-950 shadow-xl shadow-slate-950/20">
+        <div className="flex flex-col gap-2 border-b border-white/10 px-4 py-3 text-xs font-black uppercase tracking-[.14em] text-slate-300 sm:flex-row sm:items-center sm:justify-between">
+          <span className="inline-flex items-center gap-2">
+            <Terminal className="size-4 text-cyan-300" />
+            Execution Terminal
+          </span>
+          <span className={`rounded-full px-3 py-1 ${
+            executionStatus === 'success' ? 'bg-emerald-400/15 text-emerald-200'
+              : executionStatus === 'running' ? 'bg-cyan-400/15 text-cyan-200'
+                : executionStatus === 'idle' ? 'bg-white/10 text-slate-200'
+                  : 'bg-rose-400/15 text-rose-200'
+          }`}>
+            {executionLabel}
+          </span>
+        </div>
+        <pre className="min-h-28 whitespace-pre-wrap p-4 font-mono text-sm leading-6 text-slate-100">{output}</pre>
+      </div>
       {hintOpen && <p className="mt-3 rounded-2xl bg-amber-50 p-4 font-semibold leading-7 text-amber-900">{question.hint}</p>}
       {revealed && (
         <div className="mt-4 grid gap-4 lg:grid-cols-2">
@@ -4276,12 +4346,15 @@ function PlanSelectionModal({
   onSubscriptionChange: (subscription: UserSubscription | null) => void
 }) {
   const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null)
-  const [selectedDashboard, setSelectedDashboard] = useState('')
+  const [selectedDashboard, setSelectedDashboard] = useState(() => dashboardAccessKey(dashboard))
   const [language, setLanguage] = useState(programmingLanguages[0]?.name ?? 'JavaScript')
   const [paymentPlan, setPaymentPlan] = useState<SubscriptionPlan | null>(null)
   const [phone, setPhone] = useState('')
   const [busy, setBusy] = useState('')
   const [message, setMessage] = useState('')
+  const [paymentStatus, setPaymentStatus] = useState<'idle' | 'sending' | 'sent' | 'waiting' | 'success' | 'error'>('idle')
+  const [fallbackDashboardId, setFallbackDashboardId] = useState<string | null>(null)
+  const paymentPanelRef = useRef<HTMLDivElement | null>(null)
   const dashboardOptions = dashboards
     .filter((item) => availableDashboardSlugs.includes(dashboardAccessKey(item)))
     .map((item) => ({ id: item.id, label: item.title, value: dashboardAccessKey(item) }))
@@ -4312,12 +4385,43 @@ function PlanSelectionModal({
         language,
       })
       onSubscriptionChange(saved)
-      onOpenDashboard(plan === 'pro' ? programmingDashboardId : starterTargetDashboardId, 'Subscription successful. Redirecting you to your dashboard...')
+      setMessage('Free trial started successfully. Redirecting you now...')
+      onOpenDashboard(plan === 'pro' ? programmingDashboardId : starterTargetDashboardId, 'Free trial started. Redirecting you to your dashboard...')
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Could not start free trial.')
+      const rawMessage = error instanceof Error ? error.message : 'Could not start free trial.'
+      setMessage(rawMessage.toLowerCase().includes('already') ? 'This device has already used a free trial. Choose a paid plan to continue learning.' : rawMessage)
     } finally {
       setBusy('')
     }
+  }
+
+  const targetDashboardForPlan = (plan: SubscriptionPlan) => plan === 'pro' ? programmingDashboardId : starterTargetDashboardId
+
+  const pollForSubscription = async (plan: SubscriptionPlan) => {
+    if (!appUser.user) return
+    const targetDashboardId = targetDashboardForPlan(plan)
+    setFallbackDashboardId(targetDashboardId)
+    setPaymentStatus('waiting')
+    setMessage('Waiting for payment confirmation. Do not close this window while payment is processing.')
+    const startedAt = Date.now()
+    const poll = window.setInterval(async () => {
+      const activeSubscription = await getActiveSubscription(appUser.user!.id)
+      if (activeSubscription) {
+        window.clearInterval(poll)
+        setPaymentStatus('success')
+        onSubscriptionChange(activeSubscription)
+        setMessage('Payment confirmed successfully. Unlocking your access and redirecting to your dashboard...')
+        window.setTimeout(() => {
+          onOpenDashboard(targetDashboardId, 'Payment confirmed successfully. Redirecting you to your dashboard...')
+        }, 1200)
+        return
+      }
+      if (Date.now() - startedAt > 120000) {
+        window.clearInterval(poll)
+        setPaymentStatus('error')
+        setMessage('STK Push was sent, but confirmation is taking longer than expected. If you completed payment, use the fallback link or refresh your account in a moment.')
+      }
+    }, 3000)
   }
 
   const unlock = async (plan: SubscriptionPlan) => {
@@ -4331,20 +4435,33 @@ function PlanSelectionModal({
       return
     }
     setBusy(`${plan}-unlock`)
+    setPaymentStatus('sending')
     setMessage('')
     try {
       await createPayment({
         user_id: appUser.user.id,
         plan_name: plan,
         selected_dashboard: plan === 'pro' ? 'all' : selectedDashboard,
-        phone_number: phone,
+        phone_number: normalizeMpesaPhone(phone),
       })
-      setMessage('STK Push sent. Your dashboard unlocks after IntaSend confirms payment.')
+      setPaymentStatus('sent')
+      setMessage('STK Push sent. Check your phone for the M-Pesa prompt and enter your PIN to complete payment.')
+      void pollForSubscription(plan)
     } catch (error) {
+      setPaymentStatus('error')
       setMessage(error instanceof Error ? error.message : 'Could not start payment.')
     } finally {
       setBusy('')
     }
+  }
+
+  const openPaymentPanel = (plan: SubscriptionPlan) => {
+    setSelectedPlan(plan)
+    if (!validateChoice(plan)) return
+    setPaymentPlan(plan)
+    setPaymentStatus('idle')
+    setMessage('')
+    window.setTimeout(() => paymentPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
   }
 
   return (
@@ -4364,6 +4481,54 @@ function PlanSelectionModal({
         </select>
       </div>
 
+      {paymentPlan && (
+        <div ref={paymentPanelRef} className="mt-5 overflow-hidden rounded-2xl border border-cyan-100 bg-gradient-to-br from-cyan-50 via-white to-violet-50 p-4 shadow-xl shadow-cyan-100/60">
+          <button
+            className="mb-4 inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-black text-slate-700 shadow-sm transition hover:text-cyan-700"
+            onClick={() => {
+              setPaymentPlan(null)
+              setPaymentStatus('idle')
+              setMessage('')
+            }}
+          >
+            <ArrowLeft className="size-4" />
+            Back to plans
+          </button>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="font-black text-slate-950">{paymentPlan === 'pro' ? 'Unlock Pro Access' : 'Unlock Starter Pass'}</p>
+              <p className="mt-1 text-sm font-bold text-slate-600">Check your phone for the M-Pesa STK Push. Enter your M-Pesa PIN to complete payment.</p>
+            </div>
+            <PaymentStatusPill status={paymentStatus} />
+          </div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_auto]">
+            <input className="rounded-2xl border border-cyan-100 bg-white px-4 py-3 font-bold outline-none focus:border-cyan-400" onChange={(event) => setPhone(event.target.value)} placeholder="M-Pesa phone, e.g. 2547XXXXXXXX" value={phone} />
+            <button className="premium-action px-5 py-3" disabled={busy === `${paymentPlan}-unlock` || paymentStatus === 'waiting'} onClick={() => void unlock(paymentPlan)}>
+              {busy === `${paymentPlan}-unlock` ? <Sparkles className="size-4 animate-spin" /> : <CreditCard className="size-4" />}
+              {busy === `${paymentPlan}-unlock` ? 'Sending STK...' : 'Send STK Push'}
+            </button>
+          </div>
+          <div className="mt-4 grid gap-2 sm:grid-cols-3">
+            {[
+              ['1', 'STK Push sent to your phone'],
+              ['2', 'Enter your M-Pesa PIN'],
+              ['3', 'NexaGen unlocks automatically'],
+            ].map(([step, copy]) => (
+              <div className="rounded-2xl bg-white/80 p-3 text-xs font-black text-slate-600 shadow-sm" key={step}>
+                <span className="mr-2 inline-grid size-6 place-items-center rounded-full bg-cyan-100 text-cyan-700">{step}</span>
+                {copy}
+              </div>
+            ))}
+          </div>
+          <p className="mt-3 text-xs font-bold text-slate-500">Do not close this window while payment is processing.</p>
+          {fallbackDashboardId && paymentStatus !== 'idle' && (
+            <button className="mt-3 text-sm font-black text-cyan-700 hover:text-violet-700" onClick={() => onOpenDashboard(fallbackDashboardId, 'Opening your dashboard...')}>
+              If you are not redirected in 5 seconds, click here.
+            </button>
+          )}
+        </div>
+      )}
+
       <div className="mt-5 grid gap-3">
         <PlanMiniCard
           busy={busy}
@@ -4375,10 +4540,7 @@ function PlanSelectionModal({
             setMessage('')
           }}
           onTrial={() => void runTrial('starter')}
-          onUnlock={() => {
-            setSelectedPlan('starter')
-            if (validateChoice('starter')) setPaymentPlan('starter')
-          }}
+          onUnlock={() => openPaymentPanel('starter')}
           price="KES 100/month"
           selected={selectedPlan === 'starter'}
           trialNote="Free trial unlocks 1 topic, one device, and one language for the month."
@@ -4393,10 +4555,7 @@ function PlanSelectionModal({
             setMessage('')
           }}
           onTrial={() => void runTrial('pro')}
-          onUnlock={() => {
-            setSelectedPlan('pro')
-            setPaymentPlan('pro')
-          }}
+          onUnlock={() => openPaymentPanel('pro')}
           price="KES 150/month"
           selected={selectedPlan === 'pro'}
           trialNote="Save KES 50 with Pro Access."
@@ -4409,21 +4568,37 @@ function PlanSelectionModal({
             : 'Pro Access unlocks every dashboard. Free trial starts without a phone number.'}
         </p>
       )}
-      {paymentPlan && (
-        <div className="mt-4 rounded-2xl border border-teal-100 bg-teal-50 p-4">
-          <p className="font-black text-teal-900">{paymentPlan === 'pro' ? 'Unlock Pro Access' : 'Unlock Starter Pass'}</p>
-          <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_auto]">
-            <input className="rounded-2xl border border-teal-100 bg-white px-4 py-3 font-bold outline-none focus:border-teal-400" onChange={(event) => setPhone(event.target.value)} placeholder="M-Pesa phone number, e.g. 2547XXXXXXXX" value={phone} />
-            <button className="rounded-full bg-slate-950 px-5 py-3 font-black text-white disabled:opacity-60" disabled={busy === `${paymentPlan}-unlock`} onClick={() => void unlock(paymentPlan)}>
-              {busy === `${paymentPlan}-unlock` ? 'Sending STK...' : 'Send STK Push'}
-            </button>
-          </div>
-        </div>
-      )}
       {message && <p className="mt-4 rounded-2xl bg-amber-50 p-3 text-sm font-bold text-amber-800">{message}</p>}
       </div>
     </Modal>
   )
+}
+
+function PaymentStatusPill({ status }: { status: 'idle' | 'sending' | 'sent' | 'waiting' | 'success' | 'error' }) {
+  const config = {
+    idle: ['Ready', 'bg-white text-slate-700', CreditCard],
+    sending: ['Sending STK', 'bg-cyan-100 text-cyan-800', Sparkles],
+    sent: ['Payment sent', 'bg-blue-100 text-blue-800', Send],
+    waiting: ['Waiting confirmation', 'bg-amber-100 text-amber-800', Sparkles],
+    success: ['Confirmed', 'bg-emerald-100 text-emerald-800', CheckCircle2],
+    error: ['Needs attention', 'bg-rose-100 text-rose-800', X],
+  } as const
+  const [label, className, Icon] = config[status]
+  const spinning = status === 'sending' || status === 'waiting'
+
+  return (
+    <span className={`inline-flex w-fit items-center gap-2 rounded-full px-3 py-2 text-xs font-black ${className}`}>
+      <Icon className={`size-4 ${spinning ? 'animate-spin' : ''}`} />
+      {label}
+    </span>
+  )
+}
+
+function normalizeMpesaPhone(value: string) {
+  const digits = value.replace(/\D/g, '')
+  if (digits.startsWith('07') && digits.length === 10) return `254${digits.slice(1)}`
+  if (digits.startsWith('7') && digits.length === 9) return `254${digits}`
+  return digits
 }
 
 function PlanMiniCard({ busy, features, name, onSelect, onTrial, onUnlock, price, selected, trialNote }: {
@@ -4454,19 +4629,24 @@ function PlanMiniCard({ busy, features, name, onSelect, onTrial, onUnlock, price
             <p className="text-sm font-bold text-slate-500">{price}</p>
           </div>
         </div>
-        <span className="rounded-full bg-white px-3 py-1 text-xs font-black text-teal-700">{selected ? 'Selected' : trialNote}</span>
+        <span className={`rounded-full px-3 py-1 text-xs font-black ${plan === 'pro' ? 'pro-savings-badge text-amber-900' : 'bg-white text-teal-700'}`}>
+          {selected ? 'Selected' : trialNote}
+        </span>
       </div>
       <div className="mt-3 grid gap-1">
         {features.map((feature) => <span className="text-xs font-bold text-slate-600" key={feature}>- {feature}</span>)}
       </div>
       <p className="mt-3 rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-600">{trialNote}</p>
       <div className="mt-3 grid gap-2 sm:grid-cols-3">
-        <button className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-800" onClick={onSelect}>{selected ? 'Plan Selected' : 'Choose Plan'}</button>
-        <button className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-800 disabled:opacity-60" disabled={busy === `${plan}-trial`} onClick={() => {
+        <button className="premium-outline-button px-4 py-2 text-sm" onClick={onSelect}>{selected ? 'Plan Selected' : 'Choose Plan'}</button>
+        <button className="premium-action-success px-4 py-2 text-sm" disabled={busy === `${plan}-trial`} onClick={() => {
           onSelect()
           onTrial()
         }}>{busy === `${plan}-trial` ? 'Starting...' : 'Free Trial'}</button>
-        <button className="rounded-full bg-slate-950 px-4 py-2 text-sm font-black text-white disabled:opacity-60" disabled={busy === `${plan}-unlock`} onClick={onUnlock}>Unlock This Plan</button>
+        <button className="premium-action-alt relative mt-5 px-4 py-2 text-sm" disabled={busy === `${plan}-unlock`} onClick={onUnlock}>
+          <span className="floating-pointer pointer-events-none absolute left-1/2 -top-7 text-2xl opacity-90" aria-hidden="true">👇</span>
+          <span className="relative z-10">Unlock This Plan</span>
+        </button>
       </div>
     </div>
   )
@@ -4629,7 +4809,7 @@ function AuthModal({ onClose }: { onClose: () => void }) {
     setBusy(false)
     if (error) {
       const friendlyMessage = error.message.toLowerCase().includes('failed to fetch')
-        ? 'Could not reach Supabase. Stop the dev server, run npm run dev again, and confirm your internet connection is on.'
+        ? 'Could not reach Supabase. confirm your internet connection is on.'
         : error.message
       setMessage(friendlyMessage)
       return
