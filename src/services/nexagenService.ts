@@ -40,16 +40,18 @@ export type ActivityAction =
   | 'programming_question_completed'
 
 export type SubscriptionPlan = 'starter' | 'pro'
+export type AccessPlan = SubscriptionPlan | 'free_trial'
 
 export type UserSubscription = {
   id: string
   user_id: string
-  plan: SubscriptionPlan
+  plan: AccessPlan
   dashboards_access: string[]
   language_access: string[]
   status: string
   amount: number
   all_access: boolean
+  is_trial: boolean
   expires_at: string
   created_at: string
 }
@@ -125,7 +127,6 @@ export async function activateTestSubscription(payload: {
 
 export async function startFreeTrial(payload: {
   userId: string
-  plan: SubscriptionPlan
   dashboard: string
   language: string
 }): Promise<UserSubscription> {
@@ -135,7 +136,7 @@ export async function startFreeTrial(payload: {
   const { data, error } = await supabase.functions.invoke<TrialResponse>('start-free-trial', {
     body: {
       user_id: payload.userId,
-      plan: payload.plan,
+      plan: 'free_trial',
       dashboard: payload.dashboard === 'all' ? 'programming' : payload.dashboard,
       language: payload.language,
       device_fingerprint: deviceFingerprint,
@@ -435,10 +436,12 @@ export async function createPayment(payload: {
 
 function normalizeSubscription(row: Record<string, unknown> | null): UserSubscription | null {
   if (!row) return null
-  const plan = (row.plan_name ?? row.plan ?? 'starter') as SubscriptionPlan
+  const rawPlan = String(row.plan_name ?? row.plan ?? 'starter')
+  const isTrial = Boolean(row.is_trial) || rawPlan === 'free_trial' || String(row.current_plan ?? '').includes('trial')
+  const plan = (isTrial ? 'free_trial' : rawPlan === 'pro' ? 'pro' : 'starter') as AccessPlan
   const rawDashboardAccess = (row.dashboard_access ?? row.dashboards_access ?? []) as string[]
   const rawLanguageAccess = (row.language_access ?? row.allowed_languages ?? []) as string[]
-  const dashboardAccess = rawDashboardAccess.length ? rawDashboardAccess : plan === 'starter' ? ['programming'] : []
+  const dashboardAccess = rawDashboardAccess.length ? rawDashboardAccess : plan === 'free_trial' || plan === 'starter' ? ['programming'] : []
   const languageAccess = rawLanguageAccess.length ? rawLanguageAccess : plan === 'starter' ? starterLanguageAccess : []
   const allAccess = Boolean(row.all_access) || plan === 'pro' || dashboardAccess.includes('all') || languageAccess.includes('all')
   return {
@@ -450,6 +453,7 @@ function normalizeSubscription(row: Record<string, unknown> | null): UserSubscri
     status: String(row.status ?? (row.active === false ? 'inactive' : 'active')),
     amount: Number(row.amount ?? 0),
     all_access: allAccess,
+    is_trial: isTrial,
     expires_at: String(row.expires_at),
     created_at: String(row.created_at),
   }

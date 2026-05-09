@@ -2,7 +2,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 type TrialRequest = {
   user_id?: string
-  plan?: 'starter' | 'pro'
+  plan?: string
   dashboard?: string
   language?: string
   device_fingerprint?: string
@@ -22,8 +22,8 @@ Deno.serve(async (request) => {
   if (!supabaseUrl || !serviceRoleKey) return json({ error: 'Trial environment is not configured' }, 500)
 
   const body = (await request.json().catch(() => ({}))) as TrialRequest
-  if (!body.user_id || !body.plan || !body.dashboard || !body.language || !body.device_fingerprint) {
-    return json({ error: 'user_id, plan, dashboard, language, and device_fingerprint are required' }, 400)
+  if (!body.user_id || !body.dashboard || !body.language || !body.device_fingerprint) {
+    return json({ error: 'user_id, dashboard, language, and device_fingerprint are required' }, 400)
   }
 
   const supabase = createClient(supabaseUrl, serviceRoleKey)
@@ -49,7 +49,7 @@ Deno.serve(async (request) => {
 
   const expiresAt = new Date()
   expiresAt.setMonth(expiresAt.getMonth() + 1)
-  const trialDashboard = body.dashboard === 'all' ? 'programming' : body.dashboard
+  const trialDashboard = 'programming'
   const trialLanguage = body.language || 'JavaScript'
 
   const trialInsert = await supabase.from('free_trials').insert({
@@ -65,12 +65,14 @@ Deno.serve(async (request) => {
     .from('subscriptions')
     .insert({
       user_id: body.user_id,
-      plan_name: body.plan,
-      dashboard_access: body.plan === 'pro' ? ['all'] : ['programming'],
-      language_access: body.plan === 'pro' ? ['all'] : [trialLanguage],
+      plan_name: 'free_trial',
+      plan: 'free_trial',
+      dashboard_access: [trialDashboard],
+      language_access: [trialLanguage],
       status: 'active',
       active: true,
-      all_access: body.plan === 'pro',
+      is_trial: true,
+      all_access: false,
       amount: 0,
       expires_at: expiresAt.toISOString(),
     })
@@ -82,7 +84,7 @@ Deno.serve(async (request) => {
   await supabase.from('user_profiles').upsert(
     {
       id: body.user_id,
-      current_plan: `${body.plan}_trial`,
+      current_plan: 'free_trial',
       selected_dashboard: trialDashboard,
       selected_trial_language: trialLanguage,
       free_trial_used: true,

@@ -182,7 +182,7 @@ const dashboardAccessKey = (dashboard: Dashboard) => {
 const dashboardIsSubscriptionUnlocked = (dashboard: Dashboard, subscription: UserSubscription | null) => {
   if (!subscription) return false
   if (new Date(subscription.expires_at).getTime() <= Date.now()) return false
-  const isTrial = subscription.amount === 0
+  const isTrial = subscription.is_trial || subscription.plan === 'free_trial'
   if (!isTrial && (subscription.all_access || subscription.plan === 'pro' || subscription.dashboards_access.includes('all'))) return availableDashboardSlugs.includes(dashboardAccessKey(dashboard))
   return subscription.dashboards_access.includes(dashboardAccessKey(dashboard))
 }
@@ -203,6 +203,7 @@ const normalizeLanguageAccess = (access: string[]) => {
 
 const languageLimitForSubscription = (subscription: UserSubscription | null) => {
   if (!subscription || new Date(subscription.expires_at).getTime() <= Date.now()) return 0
+  if (subscription.is_trial || subscription.plan === 'free_trial') return 1
   if (subscription.all_access || subscription.plan === 'pro') return programmingLanguages.length
   return subscription.plan === 'starter' ? 10 : programmingLanguages.length
 }
@@ -212,6 +213,7 @@ const selectedLanguageIdsForSubscription = (subscription: UserSubscription | nul
   if (!subscription || limit === 0) return []
   const access = normalizeLanguageAccess(subscription.language_access)
   if (access.includes('all')) return programmingLanguages.map((item) => item.id)
+  if (subscription.is_trial || subscription.plan === 'free_trial') return access[0] ? [access[0]] : []
   if (subscription.plan === 'starter') return access.length > 1 ? access.slice(0, 10) : starterLanguageIds
   return access.length ? access : programmingLanguages.map((item) => item.id)
 }
@@ -2892,13 +2894,15 @@ function ProgrammingDashboard({
   const expandedProgrammingSubtopic = programmingSubtopics.find((item) => item.id === expandedProgrammingSubtopicId) ?? null
   const planLabel = !subscription
     ? 'No plan'
-    : subscription.plan === 'starter'
+    : subscription.is_trial || subscription.plan === 'free_trial'
+      ? 'Free trial'
+      : subscription.plan === 'starter'
         ? 'Starter Pass'
         : 'Pro Access'
   const languageRule = hasAllLanguages
     ? 'Pro Access unlocks every language.'
     : languageLimit === 1
-      ? 'This access allows only 1 language. Choose your favorite language.'
+      ? 'Free trial unlocks only your chosen language. Upgrade to Starter for 10 languages or Pro for all.'
       : `Starter Pass allows ${languageLimit} languages. The remaining languages stay locked.`
 
   const moveQuestion = (direction: 1 | -1) => {
@@ -4469,7 +4473,7 @@ function PlanSelectionModal({
   onOpenDashboard: (dashboardId: string, message: string) => void
   onSubscriptionChange: (subscription: UserSubscription | null) => void
 }) {
-  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null)
+  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | 'free_trial' | null>('free_trial')
   const [language, setLanguage] = useState(programmingLanguages[0]?.id ?? 'javascript')
   const [paymentPlan, setPaymentPlan] = useState<SubscriptionPlan | null>(null)
   const [phone, setPhone] = useState('')
@@ -4488,29 +4492,29 @@ function PlanSelectionModal({
     return true
   }
 
-  const runTrial = async (plan: SubscriptionPlan) => {
+  const runTrial = async () => {
     if (!appUser.user) {
       onAuthOpen()
       return
     }
     if (!validateChoice()) return
     if (!language) {
-      setMessage('Free plan allows only 1 language. Choose your favorite language first.')
+      setMessage('Free trial allows only 1 language. Choose your favorite language first.')
       return
     }
-    setBusy(`${plan}-trial`)
+    setSelectedPlan('free_trial')
+    setBusy('free-trial')
     setMessage('')
     try {
       const saved = await startFreeTrial({
         userId: appUser.user.id,
-        plan,
-        dashboard: plan === 'pro' ? 'all' : 'programming',
+        dashboard: 'programming',
         language,
       })
       onSubscriptionChange(saved)
       const chosenLanguage = programmingLanguages.find((item) => item.id === language)?.name ?? 'your language'
       setMessage(`Free trial started with ${chosenLanguage}. Other languages are locked until you upgrade.`)
-      onOpenDashboard(plan === 'pro' ? programmingDashboardId : starterTargetDashboardId, 'Free trial started. Redirecting you to your dashboard...')
+      onOpenDashboard(programmingDashboardId, 'Free trial started. Redirecting you to your dashboard...')
     } catch (error) {
       const rawMessage = error instanceof Error ? error.message : 'Could not start free trial.'
       setMessage(rawMessage.toLowerCase().includes('already') ? 'This device has already used a free trial. Choose a paid plan to continue learning.' : rawMessage)
@@ -4625,6 +4629,9 @@ function PlanSelectionModal({
               </label>
             ))}
           </div>
+          <button className="premium-action-success mt-3 w-full px-4 py-2 text-sm" disabled={busy === 'free-trial'} onClick={() => void runTrial()}>
+            {busy === 'free-trial' ? 'Starting...' : 'Start Free Trial'}
+          </button>
         </div>
       </div>
 
@@ -4686,11 +4693,10 @@ function PlanSelectionModal({
             setPaymentPlan(null)
             setMessage('')
           }}
-          onTrial={() => void runTrial('starter')}
           onUnlock={() => openPaymentPanel('starter')}
           price="KES 100/month"
           selected={selectedPlan === 'starter'}
-          trialNote="Free trial unlocks 1 topic, one device, and one language for the month."
+          note="Paid Starter unlocks 10 programming languages."
         />
         <PlanMiniCard
           busy={busy}
@@ -4701,16 +4707,17 @@ function PlanSelectionModal({
             setPaymentPlan(null)
             setMessage('')
           }}
-          onTrial={() => void runTrial('pro')}
           onUnlock={() => openPaymentPanel('pro')}
           price="KES 150/month"
           selected={selectedPlan === 'pro'}
-          trialNote="Save KES 50 with Pro Access."
+          note="Paid Pro unlocks every dashboard and language."
         />
       </div>
       {selectedPlan && (
         <p className="mt-4 rounded-2xl bg-slate-50 p-3 text-sm font-bold text-slate-600">
-          {selectedPlan === 'starter'
+          {selectedPlan === 'free_trial'
+            ? 'Free trial unlocks only the one language you choose above. Upgrade any time for more access.'
+            : selectedPlan === 'starter'
             ? 'Starter Pass unlocks the Programming dashboard and the first 10 programming languages. Free trial starts without a phone number.'
             : 'Pro Access unlocks every dashboard. Free trial starts without a phone number.'}
         </p>
@@ -4748,16 +4755,15 @@ function normalizeMpesaPhone(value: string) {
   return digits
 }
 
-function PlanMiniCard({ busy, features, name, onSelect, onTrial, onUnlock, price, selected, trialNote }: {
+function PlanMiniCard({ busy, features, name, onSelect, onUnlock, price, selected, note }: {
   busy: string
   features: string[]
   name: string
   onSelect: () => void
-  onTrial: () => void
   onUnlock: () => void
   price: string
   selected: boolean
-  trialNote: string
+  note: string
 }) {
   const plan = name.toLowerCase().includes('pro') ? 'pro' : 'starter'
   const Icon = plan === 'pro' ? Crown : Medal
@@ -4777,19 +4783,15 @@ function PlanMiniCard({ busy, features, name, onSelect, onTrial, onUnlock, price
           </div>
         </div>
         <span className={`rounded-full px-3 py-1 text-xs font-black ${plan === 'pro' ? 'pro-savings-badge text-amber-900' : 'bg-white text-teal-700'}`}>
-          {selected ? 'Selected' : trialNote}
+          {selected ? 'Selected' : note}
         </span>
       </div>
       <div className="mt-3 grid gap-1">
         {features.map((feature) => <span className="text-xs font-bold text-slate-600" key={feature}>- {feature}</span>)}
       </div>
-      <p className="mt-3 rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-600">{trialNote}</p>
-      <div className="mt-3 grid gap-2 sm:grid-cols-3">
+      <p className="mt-3 rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-600">{note}</p>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
         <button className="premium-outline-button px-4 py-2 text-sm" onClick={onSelect}>{selected ? 'Plan Selected' : 'Choose Plan'}</button>
-        <button className="premium-action-success px-4 py-2 text-sm" disabled={busy === `${plan}-trial`} onClick={() => {
-          onSelect()
-          onTrial()
-        }}>{busy === `${plan}-trial` ? 'Starting...' : 'Free Trial'}</button>
         <button className="premium-action-alt relative mt-5 px-4 py-2 text-sm" disabled={busy === `${plan}-unlock`} onClick={onUnlock}>
           <span className="floating-pointer pointer-events-none absolute left-1/2 -top-7 text-2xl opacity-90" aria-hidden="true">👇</span>
           <span className="relative z-10">Unlock This Plan</span>

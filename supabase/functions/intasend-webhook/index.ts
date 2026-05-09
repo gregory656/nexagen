@@ -26,7 +26,7 @@ Deno.serve(async (request) => {
   const status = String(event.state ?? event.status ?? event.invoice?.state ?? '').toUpperCase()
   const apiRef = String(event.api_ref ?? event.invoice?.api_ref ?? event.data?.api_ref ?? '')
   const transactionId = String(event.invoice_id ?? event.tracking_id ?? event.id ?? event.data?.id ?? apiRef)
-  const amount = Number(event.value ?? event.amount ?? event.invoice?.value ?? 0)
+  const eventAmount = Number(event.value ?? event.amount ?? event.invoice?.value ?? 0)
 
   if (!['COMPLETE', 'COMPLETED', 'SUCCESS', 'PAID'].includes(status)) {
     return json({ received: true, ignored: status || 'UNKNOWN' })
@@ -43,6 +43,7 @@ Deno.serve(async (request) => {
 
   const resolvedUserId = paymentLookup.data.user_id
   const planName = paymentLookup.data.plan_name === 'pro' ? 'pro' : 'starter'
+  const amount = eventAmount > 0 ? eventAmount : Number(paymentLookup.data.amount ?? (planName === 'pro' ? 150 : 100))
   const starterLanguageAccess = ['python', 'javascript', 'java', 'c', 'cpp', 'go', 'rust', 'php', 'swift', 'kotlin']
   const dashboardAccess = planName === 'pro' ? ['all'] : ['programming']
   const savedLanguageAccess = Array.isArray(paymentLookup.data.language_access) ? paymentLookup.data.language_access : []
@@ -75,6 +76,7 @@ Deno.serve(async (request) => {
       language_access: languageAccess,
       status: 'active',
       active: true,
+      is_trial: false,
       all_access: planName === 'pro',
       amount,
       expires_at: expiresAt.toISOString(),
