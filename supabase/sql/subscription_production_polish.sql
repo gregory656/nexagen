@@ -43,6 +43,8 @@ create table if not exists public.payment_logs (
   status text,
   selected_dashboard text,
   language_access text[],
+  invoice_id text,
+  tracking_id text,
   created_at timestamptz default now()
 );
 
@@ -75,7 +77,9 @@ alter table public.subscriptions
 
 alter table public.payment_logs
   add column if not exists selected_dashboard text,
-  add column if not exists language_access text[];
+  add column if not exists language_access text[],
+  add column if not exists invoice_id text,
+  add column if not exists tracking_id text;
 
 update public.subscriptions
 set

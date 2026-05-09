@@ -101,6 +101,8 @@ Deno.serve(async (request) => {
     transaction_id: apiRef,
     selected_dashboard: dashboardAccess[0],
     language_access: languageAccess,
+    invoice_id: paymentData.invoice_id ? String(paymentData.invoice_id) : null,
+    tracking_id: paymentData.tracking_id ? String(paymentData.tracking_id) : null,
   })
 
   await supabase.from('user_profiles').upsert(

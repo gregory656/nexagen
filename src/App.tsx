@@ -4552,6 +4552,32 @@ function PlanSelectionModal({
     }, 3000)
   }
 
+  const refreshSubscription = async () => {
+    if (!appUser.user) {
+      onAuthOpen()
+      return
+    }
+    setBusy('subscription-refresh')
+    setMessage('')
+    try {
+      const activeSubscription = await getActiveSubscription(appUser.user.id)
+      if (!activeSubscription) {
+        setPaymentStatus('error')
+        setMessage('No active subscription is attached to this signed-in email yet. If M-Pesa confirmed payment, send the unlock request below.')
+        return
+      }
+      onSubscriptionChange(activeSubscription)
+      setPaymentStatus('success')
+      const targetDashboardId = activeSubscription.plan === 'pro' ? programmingDashboardId : starterTargetDashboardId
+      onOpenDashboard(targetDashboardId, 'Subscription found. Redirecting you to your dashboard...')
+    } catch (error) {
+      setPaymentStatus('error')
+      setMessage(error instanceof Error ? error.message : 'Could not refresh subscription status.')
+    } finally {
+      setBusy('')
+    }
+  }
+
   const unlock = async (plan: SubscriptionPlan) => {
     if (!appUser.user) {
       onAuthOpen()
@@ -4602,6 +4628,11 @@ function PlanSelectionModal({
           ? 'Move from free trial to Starter or Pro, or change your active access. Pro unlocks all languages.'
           : 'Plans last 1 month. New challenges added every month. Don’t miss out.'}
       </p>
+      {appUser.user?.email && (
+        <p className="mt-3 rounded-2xl border border-teal-100 bg-teal-50 p-3 text-sm font-black text-teal-900">
+          Payment and unlock will be attached to: {appUser.user.email}
+        </p>
+      )}
 
       <div className="mt-5 grid gap-3 md:grid-cols-[.8fr_1.2fr]">
         <div className="rounded-2xl border border-teal-100 bg-teal-50 px-4 py-3">
@@ -4676,9 +4707,21 @@ function PlanSelectionModal({
           </div>
           <p className="mt-3 text-xs font-bold text-slate-500">Do not close this window while payment is processing.</p>
           {fallbackDashboardId && paymentStatus !== 'idle' && (
-            <button className="mt-3 text-sm font-black text-cyan-700 hover:text-violet-700" onClick={() => onOpenDashboard(fallbackDashboardId, 'Opening your dashboard...')}>
-              If you are not redirected in 5 seconds, click here.
-            </button>
+            <div className="mt-3 flex flex-wrap gap-3">
+              <button className="text-sm font-black text-cyan-700 hover:text-violet-700" disabled={busy === 'subscription-refresh'} onClick={() => void refreshSubscription()}>
+                {busy === 'subscription-refresh' ? 'Checking...' : 'Refresh subscription status'}
+              </button>
+              <button className="text-sm font-black text-slate-600 hover:text-violet-700" onClick={() => onOpenDashboard(fallbackDashboardId, 'Opening your dashboard...')}>
+                Open dashboard again
+              </button>
+            </div>
+          )}
+          {(paymentStatus === 'waiting' || paymentStatus === 'error') && (
+            <PaymentUnlockHelpForm
+              defaultEmail={appUser.user?.email ?? ''}
+              defaultError={message || 'M-Pesa/IntaSend confirmed but dashboard did not unlock.'}
+              defaultPlan={paymentPlan}
+            />
           )}
         </div>
       )}
@@ -4725,6 +4768,78 @@ function PlanSelectionModal({
       {message && <p className="mt-4 rounded-2xl bg-amber-50 p-3 text-sm font-bold text-amber-800">{message}</p>}
       </div>
     </Modal>
+  )
+}
+
+function PaymentUnlockHelpForm({
+  defaultEmail,
+  defaultError,
+  defaultPlan,
+}: {
+  defaultEmail: string
+  defaultError: string
+  defaultPlan: SubscriptionPlan | null
+}) {
+  const [email, setEmail] = useState(defaultEmail)
+  const [plan, setPlan] = useState<SubscriptionPlan>(defaultPlan ?? 'starter')
+  const [errorText, setErrorText] = useState(defaultError)
+  const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
+  const [message, setMessage] = useState('')
+
+  useEffect(() => {
+    setEmail(defaultEmail)
+  }, [defaultEmail])
+
+  useEffect(() => {
+    setErrorText(defaultError)
+  }, [defaultError])
+
+  useEffect(() => {
+    if (defaultPlan) setPlan(defaultPlan)
+  }, [defaultPlan])
+
+  const submit = async () => {
+    if (!/^\S+@\S+\.\S+$/.test(email.trim())) {
+      setStatus('error')
+      setMessage('Enter the signed-in email first.')
+      return
+    }
+    setStatus('sending')
+    setMessage('')
+    try {
+      await sendContactEmail({
+        name: 'NexaGen payment unlock request',
+        email: email.trim(),
+        type: 'payment-unlock-help',
+        subject: `Payment unlock issue: ${plan}`,
+        message: `Signed-in email: ${email.trim()}\nPlan: ${plan}\nError: ${errorText.trim() || 'Dashboard did not unlock after confirmed STK payment.'}\n\nPlease verify payment_logs/subscriptions and unlock this account.`,
+      })
+      setStatus('sent')
+      setMessage('Unlock request sent. We will verify the paid STK and attach access to this email.')
+    } catch (error) {
+      setStatus('error')
+      setMessage(error instanceof Error ? error.message : 'Could not send unlock request.')
+    }
+  }
+
+  return (
+    <div className="mt-4 rounded-2xl border border-amber-100 bg-white p-4">
+      <p className="text-sm font-black text-slate-950">Still locked after payment?</p>
+      <p className="mt-1 text-xs font-bold text-slate-500">First refresh, then sign out and sign in. If it still fails, send this unlock request.</p>
+      <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_.6fr]">
+        <input className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold outline-none focus:border-teal-400" onChange={(event) => setEmail(event.target.value)} placeholder="Signed-in email" value={email} />
+        <select className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold outline-none focus:border-teal-400" onChange={(event) => setPlan(event.target.value as SubscriptionPlan)} value={plan}>
+          <option value="starter">Starter Pass</option>
+          <option value="pro">Pro Access</option>
+        </select>
+      </div>
+      <textarea className="mt-2 min-h-20 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold outline-none focus:border-teal-400" onChange={(event) => setErrorText(event.target.value)} value={errorText} />
+      <button className="premium-action mt-2 px-4 py-2 text-sm" disabled={status === 'sending'} onClick={() => void submit()}>
+        {status === 'sending' ? <Sparkles className="size-4 animate-spin" /> : <Mail className="size-4" />}
+        {status === 'sending' ? 'Sending...' : 'Send unlock request'}
+      </button>
+      {message && <p className={`mt-2 text-xs font-black ${status === 'sent' ? 'text-emerald-700' : 'text-amber-700'}`}>{message}</p>}
+    </div>
   )
 }
 

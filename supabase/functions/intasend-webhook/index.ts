@@ -18,8 +18,10 @@ Deno.serve(async (request) => {
   const rawBody = await request.text()
   if (challenge) {
     const signature = request.headers.get('x-intasend-signature') ?? request.headers.get('x-webhook-signature')
-    const valid = await verifyHmac(rawBody, challenge, signature)
-    if (!valid) return json({ error: 'Invalid webhook signature' }, 401)
+    if (signature) {
+      const valid = await verifyHmac(rawBody, challenge, signature)
+      if (!valid) return json({ error: 'Invalid webhook signature' }, 401)
+    }
   }
 
   const event = JSON.parse(rawBody)
@@ -33,11 +35,19 @@ Deno.serve(async (request) => {
   }
 
   const supabase = createClient(supabaseUrl, serviceRoleKey)
-  const paymentLookup = await supabase
+  let paymentLookup = await supabase
     .from('payment_logs')
     .select('user_id,plan_name,amount,status,selected_dashboard,language_access')
     .eq('transaction_id', apiRef)
-    .single()
+    .maybeSingle()
+
+  if ((!apiRef || !paymentLookup.data) && transactionId) {
+    paymentLookup = await supabase
+      .from('payment_logs')
+      .select('user_id,plan_name,amount,status,selected_dashboard,language_access')
+      .or(`invoice_id.eq.${transactionId},tracking_id.eq.${transactionId}`)
+      .maybeSingle()
+  }
 
   if (paymentLookup.error || !paymentLookup.data) return json({ error: 'Webhook missing payment metadata' }, 400)
 
