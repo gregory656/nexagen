@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageSquare, X, Send, Cpu } from 'lucide-react';
+import { MessageSquare, X, Send } from 'lucide-react';
 import { Button } from './shared/Button';
 import { GlassCard } from './shared/GlassCard';
 import { supabase } from '../lib/supabase';

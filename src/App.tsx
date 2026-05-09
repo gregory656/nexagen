@@ -183,7 +183,7 @@ const dashboardIsSubscriptionUnlocked = (dashboard: Dashboard, subscription: Use
   if (!subscription) return false
   if (new Date(subscription.expires_at).getTime() <= Date.now()) return false
   const isTrial = subscription.amount === 0
-  if (!isTrial && (subscription.plan === 'pro' || subscription.dashboards_access.includes('all'))) return availableDashboardSlugs.includes(dashboardAccessKey(dashboard))
+  if (!isTrial && (subscription.all_access || subscription.plan === 'pro' || subscription.dashboards_access.includes('all'))) return availableDashboardSlugs.includes(dashboardAccessKey(dashboard))
   return subscription.dashboards_access.includes(dashboardAccessKey(dashboard))
 }
 
@@ -203,8 +203,7 @@ const normalizeLanguageAccess = (access: string[]) => {
 
 const languageLimitForSubscription = (subscription: UserSubscription | null) => {
   if (!subscription || new Date(subscription.expires_at).getTime() <= Date.now()) return 0
-  if (subscription.plan === 'pro' && subscription.amount > 0) return programmingLanguages.length
-  if (subscription.amount === 0) return 1
+  if (subscription.all_access || subscription.plan === 'pro') return programmingLanguages.length
   return subscription.plan === 'starter' ? 10 : programmingLanguages.length
 }
 
@@ -213,7 +212,6 @@ const selectedLanguageIdsForSubscription = (subscription: UserSubscription | nul
   if (!subscription || limit === 0) return []
   const access = normalizeLanguageAccess(subscription.language_access)
   if (access.includes('all')) return programmingLanguages.map((item) => item.id)
-  if (subscription.amount === 0 && access[0]) return [access[0]]
   if (subscription.plan === 'starter') return access.length > 1 ? access.slice(0, 10) : starterLanguageIds
   return access.length ? access : programmingLanguages.map((item) => item.id)
 }
@@ -359,6 +357,7 @@ function App() {
   const [subtopicUnlocks, setSubtopicUnlocks] = useState<string[]>([])
   const [completed, setCompleted] = useState<string[]>([])
   const [subscription, setSubscription] = useState<UserSubscription | null>(null)
+  const [subscriptionLoading, setSubscriptionLoading] = useState(false)
   const [pianoLevel, setPianoLevelState] = useState<SkillLevel | null>(() => localStorage.getItem('nexagen:piano-level') as SkillLevel | null)
   const [programmingLevel, setProgrammingLevelState] = useState<SkillLevel | null>(() => localStorage.getItem('nexagen:programming-level') as SkillLevel | null)
   const [bootLoading, setBootLoading] = useState(true)
@@ -400,9 +399,11 @@ function App() {
       setSubtopicUnlocks(TEST_MODE ? subtopics.map((subtopic) => subtopic.id) : [])
       setCompleted([])
       setSubscription(null)
+      setSubscriptionLoading(false)
       return
     }
 
+    setSubscriptionLoading(true)
     Promise.all([
       getUserUnlocks(appUser.user.id),
       getUserSubtopicUnlocks(appUser.user.id),
@@ -418,6 +419,7 @@ function App() {
         if (savedProgrammingLevel) setProgrammingLevelState(savedProgrammingLevel)
         setSubscription(activeSubscription)
       })
+      .finally(() => setSubscriptionLoading(false))
   }, [appUser.user, subtopics])
 
   const finishOnboarding = (mode: 'auth' | 'guest') => {
@@ -467,6 +469,7 @@ function App() {
           onSubtopicUnlock={(id) => setSubtopicUnlocks((current) => Array.from(new Set([...current, id])))}
           unlocks={unlocks}
           subscription={subscription}
+          subscriptionLoading={subscriptionLoading}
           bootLoading={bootLoading}
           bootError={bootError}
         />
@@ -646,6 +649,7 @@ type LandingShellProps = {
   subtopicUnlocks: string[]
   subtopics: Subtopic[]
   subscription: UserSubscription | null
+  subscriptionLoading: boolean
   bootLoading: boolean
   bootError: string
   unlocks: string[]
@@ -672,6 +676,7 @@ function LandingShell(props: LandingShellProps) {
     subtopicUnlocks,
     subtopics,
     subscription,
+    subscriptionLoading,
     bootLoading,
     bootError,
     unlocks,
@@ -687,6 +692,7 @@ function LandingShell(props: LandingShellProps) {
   const [revisionCards, setRevisionCards] = useState<RevisionCard[]>([])
   const [progressMessage, setProgressMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
+  const autoOpenedSubscriptionRef = useRef<string | null>(null)
   const effectiveUnlocks = useMemo(() => buildEffectiveUnlocks(dashboards, unlocks, subscription), [dashboards, subscription, unlocks])
 
   const openDashboardWorkspace = (id: string) => {
@@ -700,6 +706,11 @@ function LandingShell(props: LandingShellProps) {
     }
     if (!appUser.user) {
       onAuthOpen()
+      return
+    }
+    if (subscriptionLoading) {
+      setSuccessMessage('Checking your subscription access...')
+      window.setTimeout(() => setSuccessMessage(''), 1200)
       return
     }
     if (!dashboardIsSubscriptionUnlocked(dashboard, subscription)) {
@@ -764,7 +775,7 @@ function LandingShell(props: LandingShellProps) {
     if (selectedDashboard) {
       void trackUserActivity({ userId: appUser.user?.id, action: 'dashboard_opened', dashboardId: selectedDashboard.id })
     }
-  }, [appUser.user?.id, selectedDashboard?.id])
+  }, [appUser.user?.id, selectedDashboard])
 
   useEffect(() => {
     const onRevision = (event: Event) => {
@@ -774,6 +785,17 @@ function LandingShell(props: LandingShellProps) {
     window.addEventListener('nexagen:revision-cards', onRevision)
     return () => window.removeEventListener('nexagen:revision-cards', onRevision)
   }, [])
+
+  useEffect(() => {
+    if (!appUser.user || subscriptionLoading || !subscription || focusedDashboardId) return
+    if (autoOpenedSubscriptionRef.current === subscription.id) return
+    const target = dashboards.find((dashboard) => dashboardIsSubscriptionUnlocked(dashboard, subscription))
+    if (!target) return
+    autoOpenedSubscriptionRef.current = subscription.id
+    onSelected(target.id)
+    setFocusedDashboardId(target.id)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }, [appUser.user, dashboards, focusedDashboardId, onSelected, subscription, subscriptionLoading])
 
   if (bootLoading) return <AppSkeleton />
 
@@ -928,9 +950,7 @@ function LandingShell(props: LandingShellProps) {
       </details>
       <DailyChallenge appUser={appUser} onOpenDashboard={openDashboardWorkspace} dashboards={dashboards} />
       <ProgrammingValueSection />
-      <SaasPricingSection
-        subscription={subscription}
-      />
+      {!subscription && !subscriptionLoading && <SaasPricingSection subscription={subscription} />}
       <LaunchTrustSections appUser={appUser} />
       <ValueSections />
 
@@ -2872,15 +2892,13 @@ function ProgrammingDashboard({
   const expandedProgrammingSubtopic = programmingSubtopics.find((item) => item.id === expandedProgrammingSubtopicId) ?? null
   const planLabel = !subscription
     ? 'No plan'
-    : subscription.amount === 0
-      ? 'Free trial'
-      : subscription.plan === 'starter'
+    : subscription.plan === 'starter'
         ? 'Starter Pass'
         : 'Pro Access'
   const languageRule = hasAllLanguages
     ? 'Pro Access unlocks every language.'
     : languageLimit === 1
-      ? 'Free plan allows only 1 language. Choose your favorite language.'
+      ? 'This access allows only 1 language. Choose your favorite language.'
       : `Starter Pass allows ${languageLimit} languages. The remaining languages stay locked.`
 
   const moveQuestion = (direction: 1 | -1) => {
@@ -4452,7 +4470,6 @@ function PlanSelectionModal({
   onSubscriptionChange: (subscription: UserSubscription | null) => void
 }) {
   const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null)
-  const [selectedDashboard, setSelectedDashboard] = useState(() => dashboardAccessKey(dashboard))
   const [language, setLanguage] = useState(programmingLanguages[0]?.id ?? 'javascript')
   const [paymentPlan, setPaymentPlan] = useState<SubscriptionPlan | null>(null)
   const [phone, setPhone] = useState('')
@@ -4465,13 +4482,9 @@ function PlanSelectionModal({
     .filter((item) => availableDashboardSlugs.includes(dashboardAccessKey(item)))
     .map((item) => ({ id: item.id, label: item.title, value: dashboardAccessKey(item) }))
   const programmingDashboardId = dashboardOptions.find((item) => item.value === 'programming')?.id ?? dashboard.id
-  const starterTargetDashboardId = dashboardOptions.find((item) => item.value === selectedDashboard)?.id ?? dashboard.id
+  const starterTargetDashboardId = programmingDashboardId
 
-  const validateChoice = (plan: SubscriptionPlan) => {
-    if (plan === 'starter' && !selectedDashboard) {
-      setMessage('Choose one dashboard for Starter Pass first.')
-      return false
-    }
+  const validateChoice = () => {
     return true
   }
 
@@ -4480,7 +4493,7 @@ function PlanSelectionModal({
       onAuthOpen()
       return
     }
-    if (!validateChoice(plan)) return
+    if (!validateChoice()) return
     if (!language) {
       setMessage('Free plan allows only 1 language. Choose your favorite language first.')
       return
@@ -4491,7 +4504,7 @@ function PlanSelectionModal({
       const saved = await startFreeTrial({
         userId: appUser.user.id,
         plan,
-        dashboard: plan === 'pro' ? 'all' : selectedDashboard,
+        dashboard: plan === 'pro' ? 'all' : 'programming',
         language,
       })
       onSubscriptionChange(saved)
@@ -4540,7 +4553,7 @@ function PlanSelectionModal({
       onAuthOpen()
       return
     }
-    if (!validateChoice(plan)) return
+    if (!validateChoice()) return
     if (!phone.trim()) {
       setMessage('Enter your M-Pesa phone number to continue.')
       return
@@ -4552,7 +4565,7 @@ function PlanSelectionModal({
       await createPayment({
         user_id: appUser.user.id,
         plan_name: plan,
-        selected_dashboard: plan === 'pro' ? 'all' : selectedDashboard,
+        selected_dashboard: plan === 'pro' ? 'all' : 'programming',
         phone_number: normalizeMpesaPhone(phone),
       })
       setPaymentStatus('sent')
@@ -4568,7 +4581,7 @@ function PlanSelectionModal({
 
   const openPaymentPanel = (plan: SubscriptionPlan) => {
     setSelectedPlan(plan)
-    if (!validateChoice(plan)) return
+    if (!validateChoice()) return
     setPaymentPlan(plan)
     setPaymentStatus('idle')
     setMessage('')
@@ -4587,10 +4600,10 @@ function PlanSelectionModal({
       </p>
 
       <div className="mt-5 grid gap-3 md:grid-cols-[.8fr_1.2fr]">
-        <select className="rounded-2xl border border-slate-200 px-4 py-3 font-bold outline-none focus:border-teal-400" onChange={(event) => setSelectedDashboard(event.target.value)} value={selectedDashboard}>
-          <option value="">Select one dashboard for Starter</option>
-          {dashboardOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-        </select>
+        <div className="rounded-2xl border border-teal-100 bg-teal-50 px-4 py-3">
+          <p className="text-xs font-black uppercase tracking-[.14em] text-teal-700">Starter access</p>
+          <p className="mt-1 text-sm font-bold text-slate-700">Starter opens the Programming dashboard with the first 10 languages. Pro opens every available dashboard.</p>
+        </div>
         <div className="rounded-2xl border border-slate-200 bg-white p-3">
           <p className="mb-2 text-xs font-black uppercase tracking-[.14em] text-teal-700">Free trial language</p>
           <p className="mb-3 text-sm font-bold text-slate-600">In the free plan you can only choose 1 language. Choose your favorite language.</p>
@@ -4666,7 +4679,7 @@ function PlanSelectionModal({
       <div className="mt-5 grid gap-3">
         <PlanMiniCard
           busy={busy}
-          features={['Unlock 1 dashboard', '10 programming languages only', 'First 5 piano topics', 'Progress tracking', 'Monthly challenges']}
+          features={['Programming dashboard access', 'First 10 programming languages', 'Saved until expiry', 'Progress tracking', 'Monthly challenges']}
           name="Starter Pass"
           onSelect={() => {
             setSelectedPlan('starter')
@@ -4698,7 +4711,7 @@ function PlanSelectionModal({
       {selectedPlan && (
         <p className="mt-4 rounded-2xl bg-slate-50 p-3 text-sm font-bold text-slate-600">
           {selectedPlan === 'starter'
-            ? 'Starter Pass needs one dashboard choice. Free trial starts without a phone number.'
+            ? 'Starter Pass unlocks the Programming dashboard and the first 10 programming languages. Free trial starts without a phone number.'
             : 'Pro Access unlocks every dashboard. Free trial starts without a phone number.'}
         </p>
       )}

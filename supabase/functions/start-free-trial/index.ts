@@ -66,9 +66,11 @@ Deno.serve(async (request) => {
     .insert({
       user_id: body.user_id,
       plan_name: body.plan,
-      dashboard_access: [trialDashboard],
-      language_access: [trialLanguage],
+      dashboard_access: body.plan === 'pro' ? ['all'] : ['programming'],
+      language_access: body.plan === 'pro' ? ['all'] : [trialLanguage],
       status: 'active',
+      active: true,
+      all_access: body.plan === 'pro',
       amount: 0,
       expires_at: expiresAt.toISOString(),
     })

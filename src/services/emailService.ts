@@ -16,6 +16,14 @@ export function emailJsConfigured() {
   )
 }
 
+let emailJsInitialized = false
+
+function ensureEmailJsInitialized(publicKey: string) {
+  if (emailJsInitialized) return
+  emailjs.init({ publicKey })
+  emailJsInitialized = true
+}
+
 export async function sendContactEmail(payload: ContactEmailPayload) {
   const serviceId = String(import.meta.env.VITE_EMAILJS_SERVICE_ID ?? '').trim()
   const templateId = String(import.meta.env.VITE_EMAILJS_TEMPLATE_ID ?? '').trim()
@@ -24,6 +32,8 @@ export async function sendContactEmail(payload: ContactEmailPayload) {
   if (!emailJsConfigured()) {
     throw new Error('EmailJS is not configured. Add VITE_EMAILJS_SERVICE_ID, VITE_EMAILJS_TEMPLATE_ID, and VITE_EMAILJS_PUBLIC_KEY.')
   }
+
+  ensureEmailJsInitialized(publicKey)
 
   await emailjs.send(
     serviceId,

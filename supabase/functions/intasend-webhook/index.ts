@@ -35,7 +35,7 @@ Deno.serve(async (request) => {
   const supabase = createClient(supabaseUrl, serviceRoleKey)
   const paymentLookup = await supabase
     .from('payment_logs')
-    .select('user_id,plan_name,amount,status')
+    .select('user_id,plan_name,amount,status,selected_dashboard,language_access')
     .eq('transaction_id', apiRef)
     .single()
 
@@ -43,9 +43,10 @@ Deno.serve(async (request) => {
 
   const resolvedUserId = paymentLookup.data.user_id
   const planName = paymentLookup.data.plan_name === 'pro' ? 'pro' : 'starter'
-  const profileLookup = await supabase.from('user_profiles').select('selected_dashboard').eq('id', resolvedUserId).maybeSingle()
-  const dashboardAccess = planName === 'pro' ? ['all'] : [profileLookup.data?.selected_dashboard ?? 'piano-12-keys']
-  const languageAccess = planName === 'pro' ? ['all'] : ['python', 'javascript', 'typescript', 'java', 'c', 'cpp', 'csharp', 'go', 'rust', 'dart']
+  const starterLanguageAccess = ['python', 'javascript', 'java', 'c', 'cpp', 'go', 'rust', 'php', 'swift', 'kotlin']
+  const dashboardAccess = planName === 'pro' ? ['all'] : ['programming']
+  const savedLanguageAccess = Array.isArray(paymentLookup.data.language_access) ? paymentLookup.data.language_access : []
+  const languageAccess = planName === 'pro' ? ['all'] : (savedLanguageAccess.length ? savedLanguageAccess.slice(0, 10) : starterLanguageAccess)
   const expiresAt = new Date()
   expiresAt.setMonth(expiresAt.getMonth() + 1)
 
@@ -60,6 +61,12 @@ Deno.serve(async (request) => {
     { onConflict: 'transaction_id' },
   )
 
+  await supabase
+    .from('subscriptions')
+    .update({ status: 'inactive', active: false })
+    .eq('user_id', resolvedUserId)
+    .eq('status', 'active')
+
   await supabase.from('subscriptions').insert(
     {
       user_id: resolvedUserId,
@@ -67,6 +74,8 @@ Deno.serve(async (request) => {
       dashboard_access: dashboardAccess,
       language_access: languageAccess,
       status: 'active',
+      active: true,
+      all_access: planName === 'pro',
       amount,
       expires_at: expiresAt.toISOString(),
     },

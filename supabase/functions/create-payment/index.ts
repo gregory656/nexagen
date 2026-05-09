@@ -4,6 +4,7 @@ type PaymentRequest = {
   user_id?: string
   plan_name?: 'starter' | 'pro'
   selected_dashboard?: string
+  language_access?: string[]
   phone_number?: string
 }
 
@@ -43,8 +44,9 @@ Deno.serve(async (request) => {
   }
 
   const amount = body.plan_name === 'pro' ? 150 : 100
-  const dashboardAccess = body.plan_name === 'pro' ? ['all'] : [body.selected_dashboard ?? 'piano-12-keys']
-  const languageAccess = body.plan_name === 'pro' ? ['all'] : ['python', 'javascript', 'typescript', 'java', 'c', 'cpp', 'csharp', 'go', 'rust', 'dart']
+  const starterLanguageAccess = ['python', 'javascript', 'java', 'c', 'cpp', 'go', 'rust', 'php', 'swift', 'kotlin']
+  const dashboardAccess = body.plan_name === 'pro' ? ['all'] : ['programming']
+  const languageAccess = body.plan_name === 'pro' ? ['all'] : (body.language_access?.slice(0, 10) ?? starterLanguageAccess)
 
   const apiRef = `nexagen-${crypto.randomUUID()}`
   const paymentPayload = {
@@ -97,6 +99,8 @@ Deno.serve(async (request) => {
     amount,
     status: 'pending',
     transaction_id: apiRef,
+    selected_dashboard: dashboardAccess[0],
+    language_access: languageAccess,
   })
 
   await supabase.from('user_profiles').upsert(

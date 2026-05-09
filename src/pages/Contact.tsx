@@ -51,7 +51,7 @@ export const Contact: React.FC = () => {
                     }
                 ]);
 
-            if (error) throw error;
+            if (error) console.warn('Contact request was emailed but not saved to Supabase:', error.message);
             setStatus('success');
             setFormData({ name: '', email: '', type: 'general', subject: '', message: '' });
             setFeedback('Message sent successfully.');

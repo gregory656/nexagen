@@ -49,6 +49,7 @@ export type UserSubscription = {
   language_access: string[]
   status: string
   amount: number
+  all_access: boolean
   expires_at: string
   created_at: string
 }
@@ -64,7 +65,7 @@ export type UserProfile = {
   created_at: string
 }
 
-const starterLanguageAccess = ['python', 'javascript', 'typescript', 'java', 'c', 'cpp', 'csharp', 'go', 'rust', 'dart']
+export const starterLanguageAccess = ['python', 'javascript', 'java', 'c', 'cpp', 'go', 'rust', 'php', 'swift', 'kotlin']
 
 export async function getActiveSubscription(userId: string): Promise<UserSubscription | null> {
   const { data, error } = await supabase
@@ -97,10 +98,11 @@ export async function activateTestSubscription(payload: {
     .insert({
       user_id: payload.userId,
       plan_name: payload.plan,
-      dashboard_access: payload.dashboardsAccess,
+      dashboard_access: payload.plan === 'pro' ? ['all'] : ['programming'],
       language_access: payload.languageAccess ?? (payload.plan === 'pro' ? ['all'] : starterLanguageAccess),
       status: 'active',
       amount: payload.trial ? 0 : payload.plan === 'pro' ? 150 : 100,
+      all_access: payload.plan === 'pro',
       expires_at: expiresAt.toISOString(),
     })
     .select('*')
@@ -433,14 +435,21 @@ export async function createPayment(payload: {
 
 function normalizeSubscription(row: Record<string, unknown> | null): UserSubscription | null {
   if (!row) return null
+  const plan = (row.plan_name ?? row.plan ?? 'starter') as SubscriptionPlan
+  const rawDashboardAccess = (row.dashboard_access ?? row.dashboards_access ?? []) as string[]
+  const rawLanguageAccess = (row.language_access ?? row.allowed_languages ?? []) as string[]
+  const dashboardAccess = rawDashboardAccess.length ? rawDashboardAccess : plan === 'starter' ? ['programming'] : []
+  const languageAccess = rawLanguageAccess.length ? rawLanguageAccess : plan === 'starter' ? starterLanguageAccess : []
+  const allAccess = Boolean(row.all_access) || plan === 'pro' || dashboardAccess.includes('all') || languageAccess.includes('all')
   return {
     id: String(row.id),
     user_id: String(row.user_id),
-    plan: (row.plan_name ?? row.plan ?? 'starter') as SubscriptionPlan,
-    dashboards_access: (row.dashboard_access ?? row.dashboards_access ?? []) as string[],
-    language_access: (row.language_access ?? []) as string[],
-    status: String(row.status ?? 'active'),
+    plan,
+    dashboards_access: allAccess ? ['all'] : dashboardAccess,
+    language_access: allAccess ? ['all'] : languageAccess,
+    status: String(row.status ?? (row.active === false ? 'inactive' : 'active')),
     amount: Number(row.amount ?? 0),
+    all_access: allAccess,
     expires_at: String(row.expires_at),
     created_at: String(row.created_at),
   }
