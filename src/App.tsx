@@ -5,14 +5,17 @@ import {
   BarChart3,
   BadgeCheck,
   BookOpen,
+  BusFront,
   CheckCircle2,
   ChevronDown,
   Code2,
   Compass,
+  Copy,
   Coffee,
   CreditCard,
   Crown,
   Download,
+  ExternalLink,
   Eye,
   EyeOff,
   FileText,
@@ -142,8 +145,8 @@ const languageLogoUrls: Record<string, string> = {
 }
 
 const partnerLogoUrls: Record<string, string> = {
-  Zeraki: 'https://logo.clearbit.com/zeraki.co.ke',
-  W3Schools: 'https://logo.clearbit.com/w3schools.com',
+  Zeraki: '/zeraki.jpeg',
+  W3Schools: '/w3schools.jpeg',
   IntaSend: 'https://logo.clearbit.com/intasend.com',
   NCI: 'https://logo.clearbit.com/nci.ac.ke',
   'TopHeights Electricals': 'https://logo.clearbit.com/topheightselectricals.com',
@@ -690,6 +693,7 @@ function LandingShell(props: LandingShellProps) {
   const [comingSoonDashboard, setComingSoonDashboard] = useState<Dashboard | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [analyticsOpen, setAnalyticsOpen] = useState(false)
+  const [busTripOpen, setBusTripOpen] = useState(false)
   const [focusedDashboardId, setFocusedDashboardId] = useState<string | null>(null)
   const [revisionCards, setRevisionCards] = useState<RevisionCard[]>([])
   const [progressMessage, setProgressMessage] = useState('')
@@ -701,6 +705,7 @@ function LandingShell(props: LandingShellProps) {
     const dashboard = dashboards.find((item) => item.id === id)
     if (!dashboard) return
     const accessKey = dashboardAccessKey(dashboard)
+    setBusTripOpen(false)
     onSelected(id)
     if (!availableDashboardSlugs.includes(accessKey)) {
       setComingSoonDashboard(dashboard)
@@ -839,12 +844,13 @@ function LandingShell(props: LandingShellProps) {
           </div>
           <div className="flex items-center gap-3">
             <button
-              className="relative inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-amber-300 via-yellow-400 to-teal-400 px-4 py-2.5 text-sm font-black text-slate-950 shadow-lg shadow-amber-200/70 ring-2 ring-white transition hover:-translate-y-0.5 hover:shadow-xl sm:px-5"
+              className="relative inline-flex items-center justify-center gap-2 overflow-hidden rounded-xl border border-pink-300 bg-pink-500 px-4 py-2.5 text-sm font-black text-white shadow-lg shadow-pink-500/40 transition-all duration-300 hover:-translate-y-0.5 hover:bg-pink-400 hover:shadow-xl hover:shadow-pink-500/50 sm:px-5"
               onClick={openUpgradePlans}
             >
-              <Sparkles className="size-4 animate-pulse" />
-              Upgrade
-              <span className="absolute -right-1 -top-1 size-3 rounded-full bg-white shadow ring-2 ring-amber-300" />
+              <span className="pointer-events-none absolute inset-0 bg-gradient-to-r from-white/0 via-white/25 to-white/0 opacity-70" />
+              <Sparkles className="relative z-10 size-4" />
+              <span className="relative z-10">Upgrade</span>
+              <span className="absolute -right-1 -top-1 size-3 rounded-full bg-white shadow ring-2 ring-pink-300" />
             </button>
             <button
               aria-label="Open menu"
@@ -880,14 +886,23 @@ function LandingShell(props: LandingShellProps) {
         completed={completed}
         dashboards={dashboards}
         onAnalytics={() => {
+          setBusTripOpen(false)
           setAnalyticsOpen(true)
           setSidebarOpen(false)
         }}
         onClose={() => setSidebarOpen(false)}
         onAccount={() => {
+          setBusTripOpen(false)
           setAnalyticsOpen(false)
           setSidebarOpen(false)
           window.dispatchEvent(new CustomEvent('nexagen:open-account'))
+        }}
+        onBusTrip={() => {
+          setAnalyticsOpen(false)
+          setFocusedDashboardId(null)
+          setBusTripOpen(true)
+          setSidebarOpen(false)
+          window.scrollTo({ top: 0, behavior: 'smooth' })
         }}
         onSelectDashboard={(id) => {
           openDashboardWorkspace(id)
@@ -1034,6 +1049,10 @@ function LandingShell(props: LandingShellProps) {
         )}
       </AnimatePresence>
 
+      <AnimatePresence>
+        {busTripOpen && <BusTripBookingPage onClose={() => setBusTripOpen(false)} />}
+      </AnimatePresence>
+
       <HowItWorks
         appUser={appUser}
         completed={completed}
@@ -1177,6 +1196,133 @@ function LandingShell(props: LandingShellProps) {
   )
 }
 
+const busReferralCode = 'GRST416976'
+const busReferralUrl = 'https://buupass.com/referrals/GRST416976'
+
+function BusTripBookingPage({ onClose }: { onClose: () => void }) {
+  const [copied, setCopied] = useState(false)
+  const busTrustImages = ['/buupass1.jpeg', '/buupass2.jpeg']
+  const benefits = [
+    'Fast online booking',
+    'Secure payments',
+    'Easy route selection',
+    'Trusted bus operators',
+    'Convenient travel planning',
+    'Mobile-friendly booking experience',
+    'Quick ticket access',
+  ]
+
+  const copyReferralCode = async () => {
+    await navigator.clipboard.writeText(busReferralCode)
+    setCopied(true)
+    window.setTimeout(() => setCopied(false), 2600)
+  }
+
+  return (
+    <motion.section
+      animate={{ opacity: 1 }}
+      className="fixed inset-0 z-40 overflow-y-auto bg-[#f8fbff] px-4 py-5 sm:px-6 lg:px-8"
+      exit={{ opacity: 0 }}
+      initial={{ opacity: 0 }}
+    >
+      <div className="mx-auto max-w-6xl">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <button className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-700 shadow-sm transition hover:bg-slate-50" onClick={onClose}>
+            <ArrowLeft className="size-4" />
+            Back to dashboard
+          </button>
+          {copied && (
+            <span className="inline-flex items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50 px-4 py-2 text-sm font-black text-emerald-700 shadow-sm">
+              <CheckCircle2 className="size-4" />
+              Referral code copied successfully
+            </span>
+          )}
+        </div>
+
+        <div className="overflow-hidden rounded-[1.5rem] border border-white bg-white shadow-xl shadow-slate-200/70">
+          <div className="grid gap-0 lg:grid-cols-[1.05fr_.95fr]">
+            <div className="p-6 sm:p-8 lg:p-10">
+              <div className="relative mb-7 overflow-hidden rounded-[1.25rem] border border-slate-100 shadow-lg shadow-slate-200/70">
+                <img alt="BUUPASS booking partner" className="h-52 w-full object-cover sm:h-64" src={busTrustImages[0]} />
+                <div className="absolute inset-0 bg-gradient-to-r from-slate-950/82 via-slate-950/42 to-transparent" />
+                <div className="absolute bottom-4 left-4 right-4 flex flex-wrap items-end justify-between gap-3">
+                  <div>
+                    <span className="inline-flex items-center gap-2 rounded-full bg-white/95 px-4 py-2 text-sm font-black text-pink-700 shadow-sm">
+                      <BusFront className="size-4" />
+                      BUUPASS travel partner
+                    </span>
+                    <p className="mt-3 max-w-sm text-sm font-bold leading-6 text-white/90">Trusted booking flow with secure ticket access and route planning from a known bus travel platform.</p>
+                  </div>
+                  <span className="rounded-full border border-white/30 bg-white/15 px-4 py-2 text-xs font-black uppercase tracking-[.16em] text-white backdrop-blur">Partner referral</span>
+                </div>
+              </div>
+              <h1 className="mt-5 text-4xl font-black leading-tight text-slate-950 sm:text-5xl">Book a Bus Trip With Us</h1>
+              <p className="mt-5 max-w-2xl text-base leading-8 text-slate-600 sm:text-lg">
+                Booking a bus has never been this easy.
+              </p>
+              <p className="mt-4 max-w-2xl text-base leading-8 text-slate-600">
+                We partnered with BUUPASS to bring you comfort, convenience, and faster travel planning directly from our platform.
+              </p>
+              <p className="mt-4 max-w-2xl text-base leading-8 text-slate-600">
+                Whether you're traveling home, heading back to campus, planning a weekend getaway, or commuting across cities - BUUPASS helps you book your trip quickly and securely.
+              </p>
+
+              <div className="mt-8">
+                <h2 className="text-xl font-black text-slate-950">Benefits</h2>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  {benefits.map((benefit) => (
+                    <div className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-3 text-sm font-black text-slate-700" key={benefit}>
+                      <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-emerald-100 text-emerald-700">
+                        <CheckCircle2 className="size-4" />
+                      </span>
+                      {benefit}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="relative overflow-hidden border-t border-slate-100 bg-slate-950 p-6 text-white sm:p-8 lg:border-l lg:border-t-0 lg:p-10">
+              <div className="absolute inset-0 opacity-25" style={{ backgroundImage: `url(${busTrustImages[1]})`, backgroundPosition: 'center', backgroundSize: 'cover' }} />
+              <div className="absolute inset-0 bg-gradient-to-b from-slate-950/80 via-slate-950/90 to-slate-950" />
+              <div className="relative rounded-[1.25rem] border border-white/10 bg-white/10 p-5 shadow-2xl backdrop-blur">
+                <p className="text-sm font-bold leading-6 text-pink-100">When booking, enter the referral code exactly as shown below:</p>
+                <div className="mt-5 rounded-2xl border border-pink-300/60 bg-white p-5 text-center shadow-lg shadow-pink-500/20">
+                  <p className="text-xs font-black uppercase tracking-[.2em] text-slate-500">Referral code</p>
+                  <p className="mt-2 break-all text-4xl font-black tracking-wider text-slate-950 sm:text-5xl">{busReferralCode}</p>
+                </div>
+                <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+                  <button className="inline-flex items-center justify-center gap-2 rounded-xl border border-pink-300 bg-pink-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-pink-500/40 transition-all duration-300 hover:bg-pink-400" onClick={() => void copyReferralCode()}>
+                    <Copy className="size-4" />
+                    Copy Referral Code
+                  </button>
+                  <button className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-black text-slate-950 shadow-lg transition hover:bg-pink-50" onClick={() => window.open(busReferralUrl, '_blank')}>
+                    <ExternalLink className="size-4" />
+                    Book Now
+                  </button>
+                </div>
+              </div>
+
+              <div className="relative mt-5 rounded-[1.25rem] border border-white/10 bg-white/5 p-5 backdrop-blur">
+                <div className="mb-4 grid grid-cols-2 gap-3">
+                  {busTrustImages.map((src, index) => (
+                    <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/10" key={src}>
+                      <img alt={`BUUPASS trust visual ${index + 1}`} className="h-24 w-full object-cover" src={src} />
+                    </div>
+                  ))}
+                </div>
+                <p className="text-sm font-bold leading-6 text-slate-200">
+                  Your booking opens securely on BUUPASS in a new tab, so your NexaGen dashboard stays exactly where you left it.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </motion.section>
+  )
+}
+
 function DashboardWorkspace({
   appUser,
   completed,
@@ -1278,6 +1424,7 @@ function ProfileSidebar({
   dashboards,
   onAnalytics,
   onAccount,
+  onBusTrip,
   onClose,
   onSelectDashboard,
   open,
@@ -1289,6 +1436,7 @@ function ProfileSidebar({
   dashboards: Dashboard[]
   onAnalytics: () => void
   onAccount: () => void
+  onBusTrip: () => void
   onClose: () => void
   onSelectDashboard: (id: string) => void
   open: boolean
@@ -1309,11 +1457,12 @@ function ProfileSidebar({
           />
           <motion.aside
             animate={{ x: 0 }}
-            className="fixed left-0 top-0 z-50 flex h-dvh w-[min(88vw,360px)] flex-col border-r border-slate-200 bg-white p-5 shadow-2xl"
+            className="fixed left-0 top-0 z-50 flex h-dvh w-[min(88vw,360px)] flex-col border-r border-white/70 bg-white p-5 shadow-2xl shadow-slate-950/15"
             exit={{ x: '-100%' }}
             initial={{ x: '-100%' }}
             transition={{ type: 'spring', bounce: 0.08, duration: 0.35 }}
           >
+            <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,rgba(20,184,166,.14),transparent_35%),linear-gradient(180deg,#ffffff_0%,#f8fbff_100%)]" />
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-sm font-bold uppercase tracking-[.16em] text-teal-700">Profile hub</p>
@@ -1343,6 +1492,19 @@ function ProfileSidebar({
               <span className="inline-flex items-center gap-2">
                 <ShieldCheck className="size-5" />
                 My Account
+              </span>
+              <ChevronDown className="size-4 -rotate-90" />
+            </button>
+
+            <button
+              className="mt-3 flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-4 text-left font-black text-slate-800 shadow-sm transition hover:border-pink-200 hover:bg-pink-50 hover:text-pink-800"
+              onClick={onBusTrip}
+            >
+              <span className="inline-flex items-center gap-2">
+                <span className="grid size-8 place-items-center rounded-xl bg-pink-100 text-pink-700">
+                  <BusFront className="size-4" />
+                </span>
+                Book a Bus Trip With Us
               </span>
               <ChevronDown className="size-4 -rotate-90" />
             </button>
@@ -2186,12 +2348,14 @@ function SaasPricingSection({ subscription }: { subscription: UserSubscription |
 
 function LaunchTrustSections({ appUser }: { appUser: AppUser }) {
   const partners = [
-    ['Zeraki', 'Education technology solutions'],
-    ['W3Schools', 'Programming reference and tutorials'],
-    ['IntaSend', 'Payment infrastructure'],
-    ['NCI', 'Certification and training'],
-    ['TopHeights Electricals', 'Technical and engineering support partner'],
+    { name: 'Zeraki', description: 'Education technology solutions', image: '/zeraki.jpeg', proof: 'Learning ecosystem reference' },
+    { name: 'W3Schools', description: 'Programming reference and tutorials', image: '/w3schools.jpeg', proof: 'Developer learning benchmark' },
+    { name: 'IntaSend', description: 'Payment infrastructure', proof: 'Secure checkout readiness' },
+    { name: 'NCI', description: 'Certification and training', proof: 'Training pathway support' },
+    { name: 'TopHeights Electricals', description: 'Technical and engineering support partner', proof: 'Practical engineering collaboration' },
   ]
+  const featuredPartners = partners.filter((partner) => partner.image)
+  const supportPartners = partners.filter((partner) => !partner.image)
 
   return (
     <section className="mx-auto max-w-7xl px-4 py-16">
@@ -2210,16 +2374,34 @@ function LaunchTrustSections({ appUser }: { appUser: AppUser }) {
         <div>
           <p className="text-sm font-bold uppercase tracking-[.16em] text-teal-700">Partners and stakeholders</p>
           <h2 className="mt-2 text-3xl font-black">Built with launch credibility in mind</h2>
-          <div className="mt-6 grid gap-x-8 gap-y-5 sm:grid-cols-2">
-            {partners.map(([name, description]) => (
-              <div className="group border-t border-slate-200 pt-4 transition hover:border-teal-300" key={name}>
-                <div className="flex items-center gap-3">
-                  <span className="grid size-11 place-items-center rounded-2xl bg-white text-slate-950 ring-1 ring-slate-200">
-                    <PartnerLogo name={name} />
+          <p className="mt-3 leading-7 text-slate-600">These references are shaped into the experience as credibility anchors: education, coding standards, payments, certification, and technical support.</p>
+          <div className="mt-6 grid gap-4 md:grid-cols-2">
+            {featuredPartners.map((partner) => (
+              <div className="group relative min-h-64 overflow-hidden rounded-[1.25rem] border border-slate-100 bg-slate-950 shadow-lg shadow-slate-200/60" key={partner.name}>
+                <img alt={`${partner.name} trust reference`} className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-105" src={partner.image} />
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/68 to-slate-950/18" />
+                <div className="relative flex h-full min-h-64 flex-col justify-end p-5 text-white">
+                  <span className="mb-4 inline-flex w-fit items-center gap-2 rounded-full border border-white/20 bg-white/15 px-3 py-2 text-xs font-black uppercase tracking-[.14em] backdrop-blur">
+                    <BadgeCheck className="size-4 text-emerald-300" />
+                    {partner.proof}
                   </span>
-                  <h3 className="font-black">{name}</h3>
+                  <h3 className="text-2xl font-black">{partner.name}</h3>
+                  <p className="mt-2 text-sm font-bold leading-6 text-white/78">{partner.description}</p>
                 </div>
-                <p className="mt-3 text-sm font-semibold leading-6 text-slate-500 opacity-80 group-hover:opacity-100">{description}</p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            {supportPartners.map((partner) => (
+              <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm transition hover:-translate-y-1 hover:border-teal-200 hover:shadow-md" key={partner.name}>
+                <div className="flex items-center gap-3">
+                  <span className="grid size-10 place-items-center rounded-xl bg-slate-950 text-white">
+                    <PartnerLogo name={partner.name} />
+                  </span>
+                  <h3 className="font-black">{partner.name}</h3>
+                </div>
+                <p className="mt-3 text-xs font-black uppercase tracking-[.12em] text-teal-700">{partner.proof}</p>
+                <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">{partner.description}</p>
               </div>
             ))}
           </div>
