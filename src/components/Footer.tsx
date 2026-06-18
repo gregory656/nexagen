@@ -68,7 +68,7 @@ export const Footer: React.FC = () => {
                         </div>
                         <div className="flex items-center space-x-3">
                             <Mail size={18} className="text-white" />
-                            <span>info@nexagen.com</span>
+                            <span>nexagen656@gmail.com</span>
                         </div>
                         <div className="flex items-center space-x-3">
                             <MapPin size={18} className="text-white" />
@@ -80,7 +80,13 @@ export const Footer: React.FC = () => {
 
             <div className="max-w-7xl mx-auto px-6 mt-16 pt-8 border-t border-white/10 text-center text-white/45 text-xs">
                 <p>© {new Date().getFullYear()} NexaGen Technology Ltd. All rights reserved.</p>
-                <p className="mt-2">Powered by GracyAI</p>
+                <p className="mt-2">
+                    <a href="/privacy-policy.html" className="hover:text-white transition-colors">Privacy Policy</a>
+                    <span className="mx-2">|</span>
+                    <a href="/terms-and-conditions.html" className="hover:text-white transition-colors">Terms & Conditions</a>
+                    <span className="mx-2">|</span>
+                    Powered by GracyAI
+                </p>
             </div>
         </footer>
     );

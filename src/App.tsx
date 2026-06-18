@@ -172,6 +172,22 @@ const nexagenFluidAdLayoutKey = '-6t+ed+2i-1n-4w'
 const blogAdminEmail = 'gregorystephen2006@gmail.com'
 const localBlogPostsKey = 'nexagen:blog-posts'
 
+const getBlogSlugFromPath = () => {
+  if (typeof window === 'undefined') return null
+  const match = window.location.pathname.match(/^\/blog\/?([^/?#]+)?/)
+  return match ? decodeURIComponent(match[1] ?? '') || null : null
+}
+
+const getBlogPostPath = (post: Pick<BlogPost, 'slug' | 'title'>) => `/blog/${post.slug || slugifyBlogTitle(post.title)}`
+
+const pushAppPath = (path: string) => {
+  if (typeof window === 'undefined') return
+  if (window.location.pathname === path) return
+  window.history.pushState({}, '', path)
+}
+
+const firstBlogLine = (value: string) => value.split(/\n+/).map((line) => line.trim()).find(Boolean) ?? value.trim()
+
 const fallbackBlogPosts: BlogPost[] = [
   {
     id: 'fallback-choose-dashboard',
@@ -182,7 +198,7 @@ const fallbackBlogPosts: BlogPost[] = [
     read_time_minutes: 4,
     image_url: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=1000&q=80',
     excerpt: 'A practical path for choosing between piano, programming, and systems skills without overloading your study time.',
-    content: 'Choose the dashboard that solves your closest learning problem first, then use progress tracking to build momentum before adding a second skill area.',
+    content: 'Choose the dashboard that solves your closest learning problem first.\n\nIf you are new to NexaGen, begin with the skill that has the clearest weekly goal. Programming is best when you want practice problems, code feedback, and language structure. Piano is best when you want ear training, key fluency, and daily repetition.\n\nAfter one week, review your progress instead of guessing. The best dashboard is the one you can return to consistently.',
     status: 'published',
     author_id: null,
     created_at: '2026-06-18T00:00:00.000Z',
@@ -197,7 +213,7 @@ const fallbackBlogPosts: BlogPost[] = [
     read_time_minutes: 6,
     image_url: 'https://images.unsplash.com/photo-1520523839897-bd0b52f945a0?auto=format&fit=crop&w=1000&q=80',
     excerpt: 'Use tiny loops, ear training, and key maps to make all-key practice feel structured instead of mysterious.',
-    content: 'Start with one progression, move it through a few keys, and listen for the relationship between scale degree, chord shape, and melody.',
+    content: 'Start with one progression, move it through a few keys, and listen for the relationship between scale degree, chord shape, and melody.\n\nA simple I-V-vi-IV loop can teach more than a complicated song if you practice it slowly. Play the chords in C, then G, then D, and say the scale degrees out loud.\n\nThe goal is not speed first. The goal is hearing home, tension, emotion, and return in every key.',
     status: 'published',
     author_id: null,
     created_at: '2026-06-12T00:00:00.000Z',
@@ -212,7 +228,7 @@ const fallbackBlogPosts: BlogPost[] = [
     read_time_minutes: 5,
     image_url: 'https://images.unsplash.com/photo-1515879218367-8466d910aaa4?auto=format&fit=crop&w=1000&q=80',
     excerpt: 'Start with readable code, small exercises, and feedback loops before rushing into large projects.',
-    content: 'Readable code, short exercises, and honest testing beat rushed complexity. Build fluency first, then increase project size.',
+    content: 'Readable code, short exercises, and honest testing beat rushed complexity.\n\nA beginner should write small programs that accept input, transform data, and print clear output. Once that feels natural, move into functions, arrays, objects, files, and APIs.\n\nProjects become easier when the foundation is calm. Learn to read errors, test each step, and explain your own code in plain language.',
     status: 'published',
     author_id: null,
     created_at: '2026-06-07T00:00:00.000Z',
@@ -227,11 +243,116 @@ const fallbackBlogPosts: BlogPost[] = [
     read_time_minutes: 3,
     image_url: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=1000&q=80',
     excerpt: 'A good dashboard should show what you did, what you missed, and what deserves one more focused session.',
-    content: 'Progress tracking turns study into evidence. You can see what is done, what is weak, and where your next session should start.',
+    content: 'Progress tracking turns study into evidence.\n\nWhen learners only rely on motivation, they often repeat what feels easy. A good tracker shows completed topics, weak areas, and the next useful action.\n\nNexaGen uses progress signals to help you decide what deserves review, what is ready for practice, and what should wait until later.',
     status: 'published',
     author_id: null,
     created_at: '2026-05-30T00:00:00.000Z',
     updated_at: '2026-05-30T00:00:00.000Z',
+  },
+  {
+    id: 'fallback-debugging-basics',
+    title: 'Debugging Basics Every Beginner Should Know',
+    slug: 'debugging-basics-every-beginner-should-know',
+    category: 'Programming',
+    published_at: '2026-05-24T00:00:00.000Z',
+    read_time_minutes: 5,
+    image_url: 'https://images.unsplash.com/photo-1555949963-aa79dcee981c?auto=format&fit=crop&w=1000&q=80',
+    excerpt: 'A simple method for reading errors, isolating the broken step, and fixing code without panic.',
+    content: 'Debugging starts with reading the exact error message.\n\nDo not change ten things at once. Reproduce the problem, identify the smallest failing line, print the values you are unsure about, and test one fix at a time.\n\nMost beginner bugs are naming mistakes, wrong types, missing returns, or logic that runs in the wrong order. A calm process makes those bugs visible.',
+    status: 'published',
+    author_id: null,
+    created_at: '2026-05-24T00:00:00.000Z',
+    updated_at: '2026-05-24T00:00:00.000Z',
+  },
+  {
+    id: 'fallback-os-troubleshooting',
+    title: 'A Practical Operating Systems Troubleshooting Checklist',
+    slug: 'a-practical-operating-systems-troubleshooting-checklist',
+    category: 'Operating Systems',
+    published_at: '2026-05-18T00:00:00.000Z',
+    read_time_minutes: 6,
+    image_url: 'https://images.unsplash.com/photo-1518779578993-ec3579fee39f?auto=format&fit=crop&w=1000&q=80',
+    excerpt: 'Use observation, logs, startup checks, and safe recovery steps before reinstalling an operating system.',
+    content: 'Start troubleshooting by observing what changed before the failure.\n\nCheck power, storage, startup apps, driver updates, network state, and error logs. When possible, create a restore point or backup before making major changes.\n\nReinstalling should not be the first answer. A checklist helps learners solve the real issue and understand the system better.',
+    status: 'published',
+    author_id: null,
+    created_at: '2026-05-18T00:00:00.000Z',
+    updated_at: '2026-05-18T00:00:00.000Z',
+  },
+  {
+    id: 'fallback-learning-routine',
+    title: 'How to Build a Weekly Learning Routine That Actually Holds',
+    slug: 'how-to-build-a-weekly-learning-routine-that-actually-holds',
+    category: 'Learning',
+    published_at: '2026-05-12T00:00:00.000Z',
+    read_time_minutes: 4,
+    image_url: 'https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?auto=format&fit=crop&w=1000&q=80',
+    excerpt: 'Plan short, repeatable sessions around review, practice, and one fresh concept at a time.',
+    content: 'A strong learning routine is small enough to repeat.\n\nUse three blocks each week: review old work, practice one active skill, and learn one new idea. Keep sessions short enough that you can finish even on busy days.\n\nConsistency creates confidence. The goal is to make progress visible before the week becomes overwhelming.',
+    status: 'published',
+    author_id: null,
+    created_at: '2026-05-12T00:00:00.000Z',
+    updated_at: '2026-05-12T00:00:00.000Z',
+  },
+  {
+    id: 'fallback-gracyai-study',
+    title: 'Using GracyAI as a Study Partner Without Losing Your Thinking',
+    slug: 'using-gracyai-as-a-study-partner-without-losing-your-thinking',
+    category: 'Product',
+    published_at: '2026-05-04T00:00:00.000Z',
+    read_time_minutes: 5,
+    image_url: 'https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=1000&q=80',
+    excerpt: 'Ask better questions, request explanations, and use AI feedback while still doing the hard part yourself.',
+    content: 'AI is most useful when it helps you think more clearly.\n\nAsk GracyAI to explain a concept, generate a practice question, review your answer, or point out a missing step. Then rewrite the answer in your own words.\n\nThe learner should remain active. Use AI for feedback and structure, not as a replacement for practice.',
+    status: 'published',
+    author_id: null,
+    created_at: '2026-05-04T00:00:00.000Z',
+    updated_at: '2026-05-04T00:00:00.000Z',
+  },
+  {
+    id: 'fallback-powershell-starter',
+    title: 'PowerShell Starter Commands for Everyday Computer Work',
+    slug: 'powershell-starter-commands-for-everyday-computer-work',
+    category: 'PowerShell',
+    published_at: '2026-04-28T00:00:00.000Z',
+    read_time_minutes: 6,
+    image_url: 'https://images.unsplash.com/photo-1629654297299-c8506221ca97?auto=format&fit=crop&w=1000&q=80',
+    excerpt: 'Learn safe commands for listing files, finding text, checking processes, and understanding your machine.',
+    content: 'PowerShell becomes friendly when you start with safe reading commands.\n\nUse Get-ChildItem to list files, Select-String to search text, Get-Process to inspect running apps, and Get-Help to understand command options.\n\nAvoid destructive commands until you understand paths and parameters. Confidence comes from observing first, then changing only what you intend to change.',
+    status: 'published',
+    author_id: null,
+    created_at: '2026-04-28T00:00:00.000Z',
+    updated_at: '2026-04-28T00:00:00.000Z',
+  },
+  {
+    id: 'fallback-campus-tech',
+    title: 'Why Campus Technology Should Feel Simple for Students',
+    slug: 'why-campus-technology-should-feel-simple-for-students',
+    category: 'Campus Tech',
+    published_at: '2026-04-20T00:00:00.000Z',
+    read_time_minutes: 4,
+    image_url: 'https://images.unsplash.com/photo-1523580846011-d3a5bc25702b?auto=format&fit=crop&w=1000&q=80',
+    excerpt: 'Useful campus tools reduce confusion, connect services, and make support easier to reach.',
+    content: 'Campus technology should remove friction from student life.\n\nStudents need clear communication, simple support channels, reliable dashboards, and tools that work well on mobile devices. The best systems do not demand attention; they quietly help users complete real tasks.\n\nNexaGen is built around that idea: practical tools, accessible learning, and technology that supports daily campus routines.',
+    status: 'published',
+    author_id: null,
+    created_at: '2026-04-20T00:00:00.000Z',
+    updated_at: '2026-04-20T00:00:00.000Z',
+  },
+  {
+    id: 'fallback-practice-feedback',
+    title: 'The Feedback Loop That Makes Practice Stick',
+    slug: 'the-feedback-loop-that-makes-practice-stick',
+    category: 'Learning',
+    published_at: '2026-04-14T00:00:00.000Z',
+    read_time_minutes: 4,
+    image_url: 'https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&w=1000&q=80',
+    excerpt: 'Practice works better when learners attempt, compare, correct, and repeat with a clear target.',
+    content: 'Good practice has a loop: attempt, compare, correct, repeat.\n\nWhether you are writing code or playing piano, the first attempt shows what you understand. Comparison reveals the gap. Correction turns the gap into a lesson. Repetition makes it reliable.\n\nThat loop is why NexaGen combines content, exercises, feedback, and progress tracking in one place.',
+    status: 'published',
+    author_id: null,
+    created_at: '2026-04-14T00:00:00.000Z',
+    updated_at: '2026-04-14T00:00:00.000Z',
   },
 ]
 
@@ -767,7 +888,8 @@ function LandingShell(props: LandingShellProps) {
   const [comingSoonDashboard, setComingSoonDashboard] = useState<Dashboard | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [analyticsOpen, setAnalyticsOpen] = useState(false)
-  const [blogOpen, setBlogOpen] = useState(false)
+  const [blogOpen, setBlogOpen] = useState(() => window.location.pathname === '/blog' || window.location.pathname.startsWith('/blog/'))
+  const [routeBlogSlug, setRouteBlogSlug] = useState<string | null>(() => getBlogSlugFromPath())
   const [focusedDashboardId, setFocusedDashboardId] = useState<string | null>(null)
   const [revisionCards, setRevisionCards] = useState<RevisionCard[]>([])
   const [progressMessage, setProgressMessage] = useState('')
@@ -775,11 +897,34 @@ function LandingShell(props: LandingShellProps) {
   const autoOpenedSubscriptionRef = useRef<string | null>(null)
   const effectiveUnlocks = useMemo(() => buildEffectiveUnlocks(dashboards, unlocks, subscription), [dashboards, subscription, unlocks])
 
+  useEffect(() => {
+    const onPopState = () => {
+      const nextSlug = getBlogSlugFromPath()
+      setRouteBlogSlug(nextSlug)
+      setBlogOpen(window.location.pathname === '/blog' || window.location.pathname.startsWith('/blog/'))
+    }
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [])
+
+  const openBlogRoute = (slug?: string | null) => {
+    setBlogOpen(true)
+    setRouteBlogSlug(slug ?? null)
+    pushAppPath(slug ? `/blog/${slug}` : '/blog')
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const closeBlogRoute = () => {
+    setBlogOpen(false)
+    setRouteBlogSlug(null)
+    pushAppPath('/')
+  }
+
   const openDashboardWorkspace = (id: string) => {
     const dashboard = dashboards.find((item) => item.id === id)
     if (!dashboard) return
     const accessKey = dashboardAccessKey(dashboard)
-    setBlogOpen(false)
+    closeBlogRoute()
     onSelected(id)
     if (!availableDashboardSlugs.includes(accessKey)) {
       setComingSoonDashboard(dashboard)
@@ -961,13 +1106,13 @@ function LandingShell(props: LandingShellProps) {
         completed={completed}
         dashboards={dashboards}
         onAnalytics={() => {
-          setBlogOpen(false)
+          closeBlogRoute()
           setAnalyticsOpen(true)
           setSidebarOpen(false)
         }}
         onClose={() => setSidebarOpen(false)}
         onAccount={() => {
-          setBlogOpen(false)
+          closeBlogRoute()
           setAnalyticsOpen(false)
           setSidebarOpen(false)
           window.dispatchEvent(new CustomEvent('nexagen:open-account'))
@@ -975,9 +1120,8 @@ function LandingShell(props: LandingShellProps) {
         onBlog={() => {
           setAnalyticsOpen(false)
           setFocusedDashboardId(null)
-          setBlogOpen(true)
+          openBlogRoute()
           setSidebarOpen(false)
-          window.scrollTo({ top: 0, behavior: 'smooth' })
         }}
         onSelectDashboard={(id) => {
           openDashboardWorkspace(id)
@@ -1125,7 +1269,7 @@ function LandingShell(props: LandingShellProps) {
       </AnimatePresence>
 
       <AnimatePresence>
-        {blogOpen && <BlogDashboard appUser={appUser} onClose={() => setBlogOpen(false)} />}
+        {blogOpen && <BlogDashboard appUser={appUser} initialSlug={routeBlogSlug} onClose={closeBlogRoute} onNavigate={openBlogRoute} />}
       </AnimatePresence>
 
       <HowItWorks
@@ -1201,10 +1345,11 @@ function LandingShell(props: LandingShellProps) {
           <span>© {new Date().getFullYear()} NexaGen Technology Ltd. All rights reserved.</span>
           <span className="flex flex-wrap gap-3">
             <a href="#dashboards">Quick navigation</a>
-            <button className="font-semibold" onClick={() => setBlogOpen(true)}>Blog</button>
+            <button className="font-semibold" onClick={() => openBlogRoute()}>Blog</button>
             <a href="#pricing">Pricing</a>
             <a href="#support">Support</a>
-            <span>Terms & Privacy </span>
+            <a href="/privacy-policy.html">Privacy Policy</a>
+            <a href="/terms-and-conditions.html">Terms & Conditions</a>
             <span>Powered by GracyAI</span>
           </span>
         </div>
@@ -1332,7 +1477,17 @@ const createLocalBlogPost = (input: BlogPostInput): BlogPost => {
   }
 }
 
-function BlogDashboard({ appUser, onClose }: { appUser: AppUser; onClose: () => void }) {
+function BlogDashboard({
+  appUser,
+  initialSlug,
+  onClose,
+  onNavigate,
+}: {
+  appUser: AppUser
+  initialSlug: string | null
+  onClose: () => void
+  onNavigate: (slug?: string | null) => void
+}) {
   const isBlogAdmin = appUser.user?.email?.toLowerCase() === blogAdminEmail
   const [posts, setPosts] = useState<BlogPost[]>(readLocalBlogPosts)
   const [selectedCategory, setSelectedCategory] = useState('All')
@@ -1372,11 +1527,33 @@ function BlogDashboard({ appUser, onClose }: { appUser: AppUser; onClose: () => 
   const categories = ['All', ...Array.from(new Set(posts.map((post) => post.category)))]
   const visiblePosts = isBlogAdmin ? posts : posts.filter((post) => post.status === 'published' && new Date(post.published_at).getTime() <= Date.now())
   const featuredPost = visiblePosts[0] ?? posts[0] ?? fallbackBlogPosts[0]
+  const selectedPost = initialSlug ? visiblePosts.find((post) => (post.slug || slugifyBlogTitle(post.title)) === initialSlug) ?? null : null
   const filteredPosts = visiblePosts.filter((post) => {
     const categoryMatches = selectedCategory === 'All' || post.category === selectedCategory
     const queryMatches = !debouncedTerm || `${post.title} ${post.category} ${post.excerpt} ${post.content}`.toLowerCase().includes(debouncedTerm)
     return categoryMatches && queryMatches
   })
+
+  useEffect(() => {
+    document.title = selectedPost ? `${selectedPost.title} | NexaGen Blog` : 'NexaGen Blog'
+    return () => {
+      document.title = 'NexaGen | Interactive Tech , Music & Coding Challenges'
+    }
+  }, [selectedPost])
+
+  const openPost = (post: BlogPost) => {
+    onNavigate(post.slug || slugifyBlogTitle(post.title))
+  }
+
+  const copyPostLink = async (post: BlogPost) => {
+    const url = `${window.location.origin}${getBlogPostPath(post)}`
+    try {
+      await navigator.clipboard.writeText(url)
+      setMessage(`Link copied: ${url}`)
+    } catch {
+      setMessage(url)
+    }
+  }
 
   const editPost = (post: BlogPost) => {
     setEditingPost(post)
@@ -1416,44 +1593,53 @@ function BlogDashboard({ appUser, onClose }: { appUser: AppUser; onClose: () => 
     setMessage('Saving post...')
     try {
       const payload = { ...form, author_id: appUser.user?.id ?? null }
+      let savedPost: BlogPost | null = null
       if (editingPost) {
         if (!blogDbReady || editingPost.id.startsWith('fallback-') || editingPost.id.startsWith('local-')) {
-          const nextPosts = posts.map((post) => post.id === editingPost.id ? { ...post, ...payload, slug: slugifyBlogTitle(payload.title), image_url: payload.image_url?.trim() || null, updated_at: new Date().toISOString() } : post)
+          const updatedPost = { ...editingPost, ...payload, slug: slugifyBlogTitle(payload.title), image_url: payload.image_url?.trim() || null, updated_at: new Date().toISOString() }
+          const nextPosts = posts.map((post) => post.id === editingPost.id ? updatedPost : post)
           setPosts(nextPosts)
           saveLocalBlogPosts(nextPosts)
+          savedPost = updatedPost
           setMessage('Post updated.')
         } else {
-          await updateBlogPost(editingPost.id, payload)
+          savedPost = await updateBlogPost(editingPost.id, payload)
           setMessage('Post updated.')
         }
       } else {
         if (!blogDbReady) {
-          const nextPosts = [createLocalBlogPost(payload), ...posts]
+          savedPost = createLocalBlogPost(payload)
+          const nextPosts = [savedPost, ...posts]
           setPosts(nextPosts)
           saveLocalBlogPosts(nextPosts)
           setMessage('Post created.')
         } else {
-          await createBlogPost(payload)
+          savedPost = await createBlogPost(payload)
           setMessage('Post created.')
         }
       }
       resetForm()
       if (blogDbReady && !editingPost?.id.startsWith('fallback-') && !editingPost?.id.startsWith('local-')) await loadPosts()
+      if (savedPost) onNavigate(savedPost.slug || slugifyBlogTitle(savedPost.title))
     } catch (error) {
       const payload = { ...form, author_id: appUser.user?.id ?? null }
       if (editingPost) {
-        const nextPosts = posts.map((post) => post.id === editingPost.id ? { ...post, ...payload, slug: slugifyBlogTitle(payload.title), image_url: payload.image_url?.trim() || null, updated_at: new Date().toISOString() } : post)
+        const updatedPost = { ...editingPost, ...payload, slug: slugifyBlogTitle(payload.title), image_url: payload.image_url?.trim() || null, updated_at: new Date().toISOString() }
+        const nextPosts = posts.map((post) => post.id === editingPost.id ? updatedPost : post)
         setPosts(nextPosts)
         saveLocalBlogPosts(nextPosts)
         resetForm()
         setMessage('Post updated.')
+        onNavigate(updatedPost.slug || slugifyBlogTitle(updatedPost.title))
         return
       }
-      const nextPosts = [createLocalBlogPost(payload), ...posts]
+      const savedPost = createLocalBlogPost(payload)
+      const nextPosts = [savedPost, ...posts]
       setPosts(nextPosts)
       saveLocalBlogPosts(nextPosts)
       resetForm()
       setMessage('Post created.')
+      onNavigate(savedPost.slug || slugifyBlogTitle(savedPost.title))
     }
   }
 
@@ -1480,6 +1666,156 @@ function BlogDashboard({ appUser, onClose }: { appUser: AppUser; onClose: () => 
     }
   }
 
+  const content = selectedPost ? (
+    <BlogPostDetail
+      isBlogAdmin={isBlogAdmin}
+      onBack={() => onNavigate()}
+      onCopyLink={() => void copyPostLink(selectedPost)}
+      onEdit={() => editPost(selectedPost)}
+      onOpenPost={openPost}
+      post={selectedPost}
+      posts={visiblePosts}
+    />
+  ) : initialSlug && !loading ? (
+    <BlogNotFound onBack={() => onNavigate()} />
+  ) : (
+    <>
+      <section className="overflow-hidden rounded-[1.5rem] border border-slate-100 bg-white shadow-sm">
+        <div className="grid gap-0 lg:grid-cols-[1.08fr_.92fr]">
+          <div className="p-6 sm:p-8 lg:p-10">
+            <p className="text-sm font-black uppercase tracking-[.16em] text-sky-700">NexaGen Blog</p>
+            <h1 className="mt-3 max-w-3xl text-4xl font-black leading-tight text-slate-950 md:text-6xl">Learning notes, product updates, and practical study guides.</h1>
+            <p className="mt-5 max-w-2xl text-base leading-7 text-slate-600 md:text-lg md:leading-8">
+              Fresh ideas for learners building confidence in music, programming, systems, and personal progress.
+            </p>
+            <div className="mt-7 grid gap-3 sm:grid-cols-[1fr_auto]">
+              <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 focus-within:border-sky-300">
+                <Search className="size-5 text-slate-400" />
+                <input className="min-w-0 flex-1 bg-transparent text-sm font-bold outline-none" onChange={(event) => setTerm(event.target.value)} placeholder="Search blog posts" value={term} />
+              </label>
+              <a className="premium-action px-5 py-3 text-sm" href="#blog-posts">
+                Browse posts
+              </a>
+            </div>
+          </div>
+          <button className="block text-left" onClick={() => openPost(featuredPost)}>
+            <img alt="" className="h-72 w-full object-cover lg:h-full" decoding="async" src={featuredPost.image_url ?? fallbackBlogPosts[0].image_url ?? visuals[1]} />
+          </button>
+        </div>
+      </section>
+
+      {isBlogAdmin && (
+        <section className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-[1.25rem] border border-slate-100 bg-white p-5 shadow-sm">
+          <div>
+            <p className="text-sm font-black uppercase tracking-[.16em] text-teal-700">Publisher studio</p>
+            <h2 className="mt-1 text-2xl font-black">Manage blog posts</h2>
+          </div>
+          <button className="premium-action px-5 py-3 text-sm" onClick={createPost}>Create post</button>
+        </section>
+      )}
+
+      <div className="my-6 rounded-[1.25rem] border border-slate-100 bg-white p-4 shadow-sm">
+        <AdSense adSlot={nexagenDisplayAdSlot} />
+      </div>
+
+      <section className="grid gap-6 py-6 lg:grid-cols-[1fr_320px]" id="blog-posts">
+        <div className="space-y-5">
+          <div className="flex flex-wrap gap-2">
+            {categories.map((category) => (
+              <button
+                className={`rounded-full border px-4 py-2 text-sm font-black transition ${
+                  selectedCategory === category ? 'border-sky-300 bg-sky-600 text-white shadow-md shadow-sky-200' : 'border-slate-200 bg-white text-slate-700 hover:border-sky-200 hover:text-sky-700'
+                }`}
+                key={category}
+                onClick={() => setSelectedCategory(category)}
+              >
+                {category}
+              </button>
+            ))}
+          </div>
+
+          {loading && <p className="rounded-2xl bg-white p-5 text-sm font-black text-slate-500 shadow-sm">Loading blog posts...</p>}
+
+          <article className="grid overflow-hidden rounded-[1.25rem] border border-slate-100 bg-white shadow-sm md:grid-cols-[.9fr_1.1fr]">
+            <button className="block text-left" onClick={() => openPost(featuredPost)}>
+              <img alt="" className="h-64 w-full object-cover md:h-full" decoding="async" src={featuredPost.image_url ?? fallbackBlogPosts[0].image_url ?? visuals[1]} />
+            </button>
+            <div className="p-6">
+              <span className="rounded-full bg-teal-50 px-3 py-1 text-xs font-black uppercase tracking-[.12em] text-teal-700">Featured</span>
+              <button className="block text-left" onClick={() => openPost(featuredPost)}>
+                <h2 className="mt-4 text-2xl font-black text-slate-950 hover:text-sky-700">{featuredPost.title}</h2>
+              </button>
+              <p className="mt-3 leading-7 text-slate-600">{featuredPost.excerpt}</p>
+              <BlogInlinePreview content={featuredPost.content} onReadMore={() => openPost(featuredPost)} />
+              <div className="mt-5 flex flex-wrap gap-2 text-xs font-bold text-slate-500">
+                <span>{featuredPost.category}</span>
+                <span>{formatBlogDate(featuredPost.published_at)}</span>
+                <span>{featuredPost.read_time_minutes} min read</span>
+                {isBlogAdmin && <span>{featuredPost.status}</span>}
+              </div>
+              <div className="mt-5 flex flex-wrap gap-2">
+                <button className="premium-action px-4 py-2 text-sm" onClick={() => openPost(featuredPost)}>Read post</button>
+                <button className="premium-outline-button px-4 py-2 text-sm" onClick={() => void copyPostLink(featuredPost)}>Copy link</button>
+              </div>
+            </div>
+          </article>
+
+          <div className="rounded-[1.25rem] border border-slate-100 bg-white p-4 shadow-sm">
+            <AdSense adFormat="fluid" adLayoutKey={nexagenFluidAdLayoutKey} adSlot={nexagenFluidAdSlot} />
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            {filteredPosts.map((post) => (
+              <BlogPostCard
+                isBlogAdmin={isBlogAdmin}
+                key={post.id}
+                onCopyLink={() => void copyPostLink(post)}
+                onDelete={() => void removePost(post)}
+                onEdit={() => editPost(post)}
+                onOpen={() => openPost(post)}
+                post={post}
+              />
+            ))}
+          </div>
+
+          {!filteredPosts.length && <EmptyState compact message="No blog post matches that search yet." />}
+        </div>
+
+        <aside className="space-y-5">
+          <div className="rounded-[1.25rem] border border-slate-100 bg-white p-5 shadow-sm">
+            <h2 className="text-lg font-black">Publishing</h2>
+            <div className="mt-4 grid gap-3 text-sm font-bold text-slate-600">
+              {[
+                `${visiblePosts.length} visible posts`,
+                `${posts.filter((post) => post.status === 'draft').length} drafts`,
+                isBlogAdmin ? 'Admin editing enabled' : 'Public reading mode',
+              ].map((item) => (
+                <div className="flex items-center gap-3 rounded-xl bg-slate-50 p-3" key={item}>
+                  <CheckCircle2 className="size-4 text-teal-600" />
+                  {item}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-[1.25rem] border border-slate-100 bg-white p-5 shadow-sm">
+            <h2 className="text-lg font-black">Sponsored</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-500">Helpful recommendations and learning-friendly offers may appear here.</p>
+            <div className="mt-4">
+              <AdSense adFormat="fluid" adLayoutKey={nexagenFluidAdLayoutKey} adSlot={nexagenFluidAdSlot} />
+            </div>
+          </div>
+
+          <div className="rounded-[1.25rem] border border-slate-100 bg-white p-5 shadow-sm">
+            <h2 className="text-lg font-black">Get Updates</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-500">Send readers from blog content into newsletter updates and dashboard launches.</p>
+            <NewsletterSignup />
+          </div>
+        </aside>
+      </section>
+    </>
+  )
+
   return (
     <motion.section
       animate={{ opacity: 1 }}
@@ -1500,141 +1836,8 @@ function BlogDashboard({ appUser, onClose }: { appUser: AppUser; onClose: () => 
           </span>
         </div>
 
-        <section className="overflow-hidden rounded-[1.5rem] border border-slate-100 bg-white shadow-sm">
-          <div className="grid gap-0 lg:grid-cols-[1.08fr_.92fr]">
-            <div className="p-6 sm:p-8 lg:p-10">
-              <p className="text-sm font-black uppercase tracking-[.16em] text-sky-700">NexaGen Blog</p>
-              <h1 className="mt-3 max-w-3xl text-4xl font-black leading-tight text-slate-950 md:text-6xl">Learning notes, product updates, and practical study guides.</h1>
-              <p className="mt-5 max-w-2xl text-base leading-7 text-slate-600 md:text-lg md:leading-8">
-                Fresh ideas for learners building confidence in music, programming, systems, and personal progress.
-              </p>
-              <div className="mt-7 grid gap-3 sm:grid-cols-[1fr_auto]">
-                <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 focus-within:border-sky-300">
-                  <Search className="size-5 text-slate-400" />
-                  <input className="min-w-0 flex-1 bg-transparent text-sm font-bold outline-none" onChange={(event) => setTerm(event.target.value)} placeholder="Search blog posts" value={term} />
-                </label>
-                <a className="premium-action px-5 py-3 text-sm" href="#blog-posts">
-                  Browse posts
-                </a>
-              </div>
-            </div>
-            <img alt="" className="h-72 w-full object-cover lg:h-full" decoding="async" src={featuredPost.image_url ?? fallbackBlogPosts[0].image_url ?? visuals[1]} />
-          </div>
-        </section>
-
         {message && <p className="mt-5 rounded-2xl bg-sky-50 p-4 text-sm font-black text-sky-800">{message}</p>}
-
-        {isBlogAdmin && (
-          <section className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-[1.25rem] border border-slate-100 bg-white p-5 shadow-sm">
-            <div>
-              <p className="text-sm font-black uppercase tracking-[.16em] text-teal-700">Publisher studio</p>
-              <h2 className="mt-1 text-2xl font-black">Manage blog posts</h2>
-            </div>
-            <button className="premium-action px-5 py-3 text-sm" onClick={createPost}>Create post</button>
-          </section>
-        )}
-
-        <div className="my-6 rounded-[1.25rem] border border-slate-100 bg-white p-4 shadow-sm">
-          <AdSense adSlot={nexagenDisplayAdSlot} />
-        </div>
-
-        <section className="grid gap-6 py-6 lg:grid-cols-[1fr_320px]" id="blog-posts">
-          <div className="space-y-5">
-            <div className="flex flex-wrap gap-2">
-              {categories.map((category) => (
-                <button
-                  className={`rounded-full border px-4 py-2 text-sm font-black transition ${
-                    selectedCategory === category ? 'border-sky-300 bg-sky-600 text-white shadow-md shadow-sky-200' : 'border-slate-200 bg-white text-slate-700 hover:border-sky-200 hover:text-sky-700'
-                  }`}
-                  key={category}
-                  onClick={() => setSelectedCategory(category)}
-                >
-                  {category}
-                </button>
-              ))}
-            </div>
-
-            {loading && <p className="rounded-2xl bg-white p-5 text-sm font-black text-slate-500 shadow-sm">Loading blog posts...</p>}
-
-            <article className="grid overflow-hidden rounded-[1.25rem] border border-slate-100 bg-white shadow-sm md:grid-cols-[.9fr_1.1fr]">
-              <img alt="" className="h-64 w-full object-cover md:h-full" decoding="async" src={featuredPost.image_url ?? fallbackBlogPosts[0].image_url ?? visuals[1]} />
-              <div className="p-6">
-                <span className="rounded-full bg-teal-50 px-3 py-1 text-xs font-black uppercase tracking-[.12em] text-teal-700">Featured</span>
-                <h2 className="mt-4 text-2xl font-black text-slate-950">{featuredPost.title}</h2>
-                <p className="mt-3 leading-7 text-slate-600">{featuredPost.excerpt}</p>
-                <div className="mt-5 flex flex-wrap gap-2 text-xs font-bold text-slate-500">
-                  <span>{featuredPost.category}</span>
-                  <span>{formatBlogDate(featuredPost.published_at)}</span>
-                  <span>{featuredPost.read_time_minutes} min read</span>
-                  {isBlogAdmin && <span>{featuredPost.status}</span>}
-                </div>
-              </div>
-            </article>
-
-            <div className="rounded-[1.25rem] border border-slate-100 bg-white p-4 shadow-sm">
-              <AdSense adFormat="fluid" adLayoutKey={nexagenFluidAdLayoutKey} adSlot={nexagenFluidAdSlot} />
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              {filteredPosts.map((post) => (
-                <article className="overflow-hidden rounded-[1.25rem] border border-slate-100 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-md" key={post.id}>
-                  <img alt="" className="h-44 w-full object-cover" decoding="async" loading="lazy" src={post.image_url ?? fallbackBlogPosts[0].image_url ?? visuals[1]} />
-                  <div className="p-5">
-                    <div className="flex flex-wrap gap-2 text-xs font-bold text-slate-500">
-                      <span>{post.category}</span>
-                      <span>{formatBlogDate(post.published_at)}</span>
-                      <span>{post.read_time_minutes} min read</span>
-                      {isBlogAdmin && <span>{post.status}</span>}
-                    </div>
-                    <h3 className="mt-3 text-lg font-black text-slate-950">{post.title}</h3>
-                    <p className="mt-2 text-sm leading-6 text-slate-600">{post.excerpt}</p>
-                    <p className="mt-3 line-clamp-4 text-sm leading-6 text-slate-500">{post.content}</p>
-                    {isBlogAdmin && (
-                      <div className="mt-4 flex flex-wrap gap-2">
-                        <button className="rounded-full bg-slate-950 px-4 py-2 text-xs font-black text-white" onClick={() => editPost(post)}>Edit</button>
-                        <button className="rounded-full border border-red-100 bg-red-50 px-4 py-2 text-xs font-black text-red-700" onClick={() => editPost(post)}>Delete</button>
-                      </div>
-                    )}
-                  </div>
-                </article>
-              ))}
-            </div>
-
-            {!filteredPosts.length && <EmptyState compact message="No blog post matches that search yet." />}
-          </div>
-
-          <aside className="space-y-5">
-            <div className="rounded-[1.25rem] border border-slate-100 bg-white p-5 shadow-sm">
-              <h2 className="text-lg font-black">Publishing</h2>
-              <div className="mt-4 grid gap-3 text-sm font-bold text-slate-600">
-                {[
-                  `${visiblePosts.length} visible posts`,
-                  `${posts.filter((post) => post.status === 'draft').length} drafts`,
-                  isBlogAdmin ? 'Admin editing enabled' : 'Public reading mode',
-                ].map((item) => (
-                  <div className="flex items-center gap-3 rounded-xl bg-slate-50 p-3" key={item}>
-                    <CheckCircle2 className="size-4 text-teal-600" />
-                    {item}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded-[1.25rem] border border-slate-100 bg-white p-5 shadow-sm">
-              <h2 className="text-lg font-black">Sponsored</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-500">Helpful recommendations and learning-friendly offers may appear here.</p>
-              <div className="mt-4">
-                <AdSense adFormat="fluid" adLayoutKey={nexagenFluidAdLayoutKey} adSlot={nexagenFluidAdSlot} />
-              </div>
-            </div>
-
-            <div className="rounded-[1.25rem] border border-slate-100 bg-white p-5 shadow-sm">
-              <h2 className="text-lg font-black">Get Updates</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-500">Send readers from blog content into newsletter updates and dashboard launches.</p>
-              <NewsletterSignup />
-            </div>
-          </aside>
-        </section>
+        {content}
       </div>
 
       <AnimatePresence>
@@ -1651,6 +1854,168 @@ function BlogDashboard({ appUser, onClose }: { appUser: AppUser; onClose: () => 
         )}
       </AnimatePresence>
     </motion.section>
+  )
+}
+
+function BlogInlinePreview({ content, onReadMore }: { content: string; onReadMore: () => void }) {
+  return (
+    <div className="mt-3 rounded-2xl bg-slate-50 p-4">
+      <p className="text-sm leading-6 text-slate-600">{firstBlogLine(content)}</p>
+      <button className="mt-3 text-sm font-black text-sky-700 hover:text-sky-900" onClick={onReadMore}>
+        Read more
+      </button>
+    </div>
+  )
+}
+
+function BlogPostCard({
+  isBlogAdmin,
+  onCopyLink,
+  onDelete,
+  onEdit,
+  onOpen,
+  post,
+}: {
+  isBlogAdmin: boolean
+  onCopyLink: () => void
+  onDelete: () => void
+  onEdit: () => void
+  onOpen: () => void
+  post: BlogPost
+}) {
+  return (
+    <article className="overflow-hidden rounded-[1.25rem] border border-slate-100 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-md">
+      <button className="block w-full text-left" onClick={onOpen}>
+        <img alt="" className="h-44 w-full object-cover" decoding="async" loading="lazy" src={post.image_url ?? fallbackBlogPosts[0].image_url ?? visuals[1]} />
+      </button>
+      <div className="p-5">
+        <div className="flex flex-wrap gap-2 text-xs font-bold text-slate-500">
+          <span>{post.category}</span>
+          <span>{formatBlogDate(post.published_at)}</span>
+          <span>{post.read_time_minutes} min read</span>
+          {isBlogAdmin && <span>{post.status}</span>}
+        </div>
+        <button className="block text-left" onClick={onOpen}>
+          <h3 className="mt-3 text-lg font-black text-slate-950 hover:text-sky-700">{post.title}</h3>
+        </button>
+        <p className="mt-2 text-sm leading-6 text-slate-600">{post.excerpt}</p>
+        <BlogInlinePreview content={post.content} onReadMore={onOpen} />
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button className="premium-action px-4 py-2 text-xs" onClick={onOpen}>Read post</button>
+          <button className="premium-outline-button px-4 py-2 text-xs" onClick={onCopyLink}>Copy link</button>
+          {isBlogAdmin && (
+            <>
+              <button className="rounded-full bg-slate-950 px-4 py-2 text-xs font-black text-white" onClick={onEdit}>Edit</button>
+              <button className="rounded-full border border-red-100 bg-red-50 px-4 py-2 text-xs font-black text-red-700" onClick={onDelete}>Delete</button>
+            </>
+          )}
+        </div>
+      </div>
+    </article>
+  )
+}
+
+function BlogPostDetail({
+  isBlogAdmin,
+  onBack,
+  onCopyLink,
+  onEdit,
+  onOpenPost,
+  post,
+  posts,
+}: {
+  isBlogAdmin: boolean
+  onBack: () => void
+  onCopyLink: () => void
+  onEdit: () => void
+  onOpenPost: (post: BlogPost) => void
+  post: BlogPost
+  posts: BlogPost[]
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const relatedPosts = posts.filter((item) => item.id !== post.id).slice(0, 3)
+
+  return (
+    <article className="grid gap-6 py-2 lg:grid-cols-[1fr_320px]">
+      <div className="overflow-hidden rounded-[1.5rem] border border-slate-100 bg-white shadow-sm">
+        <img alt="" className="h-72 w-full object-cover md:h-[420px]" decoding="async" src={post.image_url ?? fallbackBlogPosts[0].image_url ?? visuals[1]} />
+        <div className="p-6 sm:p-8 lg:p-10">
+          <button className="mb-5 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-700 shadow-sm transition hover:bg-slate-50" onClick={onBack}>
+            <ArrowLeft className="size-4" />
+            Back to all posts
+          </button>
+          <div className="flex flex-wrap gap-2 text-xs font-bold text-slate-500">
+            <span>{post.category}</span>
+            <span>{formatBlogDate(post.published_at)}</span>
+            <span>{post.read_time_minutes} min read</span>
+            {isBlogAdmin && <span>{post.status}</span>}
+          </div>
+          <h1 className="mt-4 text-4xl font-black leading-tight text-slate-950 md:text-6xl">{post.title}</h1>
+          <p className="mt-5 text-lg leading-8 text-slate-600">{post.excerpt}</p>
+          <div className="mt-6 flex flex-wrap gap-2">
+            <button className="premium-action px-5 py-3 text-sm" onClick={onCopyLink}>Copy share link</button>
+            {isBlogAdmin && <button className="premium-outline-button px-5 py-3 text-sm" onClick={onEdit}>Edit post</button>}
+          </div>
+
+          <div className="mt-8 rounded-[1.25rem] bg-slate-50 p-5">
+            <p className="text-base leading-8 text-slate-700">{firstBlogLine(post.content)}</p>
+            {!expanded && (
+              <button className="mt-4 text-sm font-black text-sky-700 hover:text-sky-900" onClick={() => setExpanded(true)}>
+                Read more
+              </button>
+            )}
+          </div>
+
+          {expanded && (
+            <div className="mt-8 space-y-5 text-base leading-8 text-slate-700">
+              {post.content
+                .split(/\n+/)
+                .map((paragraph) => paragraph.trim())
+                .filter(Boolean)
+                .slice(1)
+                .map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
+              <button className="text-sm font-black text-sky-700 hover:text-sky-900" onClick={() => setExpanded(false)}>
+                Read less
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <aside className="space-y-5">
+        <div className="rounded-[1.25rem] border border-slate-100 bg-white p-5 shadow-sm">
+          <h2 className="text-lg font-black">Share This Post</h2>
+          <p className="mt-2 break-all rounded-2xl bg-slate-50 p-3 text-xs font-bold text-slate-600">{`${window.location.origin}${getBlogPostPath(post)}`}</p>
+          <button className="premium-action mt-4 w-full px-4 py-3 text-sm" onClick={onCopyLink}>Copy link</button>
+        </div>
+
+        <div className="rounded-[1.25rem] border border-slate-100 bg-white p-4 shadow-sm">
+          <AdSense adFormat="fluid" adLayoutKey={nexagenFluidAdLayoutKey} adSlot={nexagenFluidAdSlot} />
+        </div>
+
+        <div className="rounded-[1.25rem] border border-slate-100 bg-white p-5 shadow-sm">
+          <h2 className="text-lg font-black">More NexaGen Posts</h2>
+          <div className="mt-4 grid gap-3">
+            {relatedPosts.map((item) => (
+              <button className="rounded-2xl bg-slate-50 p-4 text-left transition hover:bg-sky-50" key={item.id} onClick={() => onOpenPost(item)}>
+                <span className="text-xs font-black uppercase tracking-[.12em] text-sky-700">{item.category}</span>
+                <span className="mt-1 block font-black text-slate-950">{item.title}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </aside>
+    </article>
+  )
+}
+
+function BlogNotFound({ onBack }: { onBack: () => void }) {
+  return (
+    <section className="rounded-[1.5rem] border border-slate-100 bg-white p-8 text-center shadow-sm">
+      <h1 className="text-3xl font-black text-slate-950">Blog post not found</h1>
+      <p className="mx-auto mt-3 max-w-xl leading-7 text-slate-600">This post may still be a draft, may have been renamed, or may not exist on this deployment yet.</p>
+      <button className="premium-action mt-6 px-5 py-3 text-sm" onClick={onBack}>View all blog posts</button>
+    </section>
   )
 }
 
