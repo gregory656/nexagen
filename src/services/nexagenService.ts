@@ -67,7 +67,45 @@ export type UserProfile = {
   created_at: string
 }
 
+export type BlogPostStatus = 'draft' | 'published'
+
+export type BlogPost = {
+  id: string
+  title: string
+  slug: string
+  category: string
+  excerpt: string
+  content: string
+  image_url: string | null
+  read_time_minutes: number
+  status: BlogPostStatus
+  published_at: string
+  author_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type BlogPostInput = {
+  title: string
+  category: string
+  excerpt: string
+  content: string
+  image_url?: string | null
+  read_time_minutes: number
+  status: BlogPostStatus
+  published_at: string
+  author_id?: string | null
+}
+
 export const starterLanguageAccess = ['python', 'javascript', 'java', 'c', 'cpp', 'go', 'rust', 'php', 'swift', 'kotlin']
+
+const slugify = (value: string) =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
 
 export async function getActiveSubscription(userId: string): Promise<UserSubscription | null> {
   const { data, error } = await supabase
@@ -207,6 +245,68 @@ export async function submitRating(payload: {
     rating: payload.rating,
     feedback: payload.feedback?.trim() || null,
   })
+  if (error) throw error
+}
+
+export async function getBlogPosts(includeDrafts = false): Promise<BlogPost[]> {
+  let query = supabase.from('blog_posts').select('*').order('published_at', { ascending: false })
+
+  if (!includeDrafts) {
+    query = query.eq('status', 'published').lte('published_at', new Date().toISOString())
+  }
+
+  const { data, error } = await query
+  if (error) throw error
+  return (data ?? []) as BlogPost[]
+}
+
+export async function createBlogPost(input: BlogPostInput): Promise<BlogPost> {
+  const title = input.title.trim()
+  const slug = slugify(title)
+  const { data, error } = await supabase
+    .from('blog_posts')
+    .insert({
+      ...input,
+      title,
+      slug,
+      category: input.category.trim(),
+      excerpt: input.excerpt.trim(),
+      content: input.content.trim(),
+      image_url: input.image_url?.trim() || null,
+      author_id: input.author_id ?? null,
+    })
+    .select('*')
+    .single()
+
+  if (error) throw error
+  return data as BlogPost
+}
+
+export async function updateBlogPost(id: string, input: BlogPostInput): Promise<BlogPost> {
+  const title = input.title.trim()
+  const slug = slugify(title)
+  const { data, error } = await supabase
+    .from('blog_posts')
+    .update({
+      ...input,
+      title,
+      slug,
+      category: input.category.trim(),
+      excerpt: input.excerpt.trim(),
+      content: input.content.trim(),
+      image_url: input.image_url?.trim() || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .select('*')
+    .single()
+
+  if (error) throw error
+  return data as BlogPost
+}
+
+export async function deleteBlogPost(id: string): Promise<void> {
+  const { error } = await supabase.from('blog_posts').delete().eq('id', id)
   if (error) throw error
 }
 

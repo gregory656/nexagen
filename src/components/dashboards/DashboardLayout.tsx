@@ -15,6 +15,7 @@ import {
     User as UserIcon,
     Menu,
     X,
+    Newspaper,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { RoleSwitcher } from '../RoleSwitcher';
@@ -33,18 +34,21 @@ export const DashboardLayout: React.FC = () => {
         { name: 'Bookings', path: '/dashboard/admin/bookings', icon: Calendar },
         { name: 'Reviews', path: '/dashboard/admin/reviews', icon: Star },
         { name: 'Donations', path: '/dashboard/admin/donations', icon: DollarSign },
+        { name: 'Blog', path: '/dashboard/admin/blog', icon: Newspaper },
     ];
 
     const ceoMenu = [
         { name: 'Strategic Overview', path: '/dashboard/ceo', icon: Activity },
         { name: 'Priority Comms', path: '/dashboard/ceo/messages', icon: Zap },
         { name: 'CEO Meetings', path: '/dashboard/ceo/meetings', icon: Calendar },
+        { name: 'Blog', path: '/dashboard/ceo/blog', icon: Newspaper },
     ];
 
     const userMenu = [
         { name: 'My Activity', path: '/dashboard/user', icon: UserIcon },
         { name: 'My Requests', path: '/dashboard/user/requests', icon: MessageSquare },
         { name: 'My Bookings', path: '/dashboard/user/bookings', icon: Calendar },
+        { name: 'Blog', path: '/dashboard/user/blog', icon: Newspaper },
     ];
 
     const menuItems = isAdmin ? adminMenu : isCEO ? ceoMenu : userMenu;

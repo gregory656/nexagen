@@ -5,17 +5,14 @@ import {
   BarChart3,
   BadgeCheck,
   BookOpen,
-  BusFront,
   CheckCircle2,
   ChevronDown,
   Code2,
   Compass,
-  Copy,
   Coffee,
   CreditCard,
   Crown,
   Download,
-  ExternalLink,
   Eye,
   EyeOff,
   FileText,
@@ -30,6 +27,7 @@ import {
   Menu,
   MessageCircle,
   Music2,
+  Newspaper,
   Pause,
   Play,
   Search,
@@ -43,7 +41,7 @@ import {
   Volume2,
   X,
 } from 'lucide-react'
-import type { ReactNode } from 'react'
+import type { Dispatch, ReactNode, SetStateAction } from 'react'
 import { Suspense, createContext, lazy, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Bar,
@@ -74,6 +72,7 @@ import {
   type ProgrammingSubtopic,
 } from './data/programmingContent'
 import { useDebouncedValue } from './hooks/useDebouncedValue'
+import AdSense from './components/AdSense'
 import { supabase, supabaseConfigured } from './lib/supabase'
 import { sendContactEmail } from './services/emailService'
 import { executeJudge0, judge0Configured, type Judge0Result } from './services/judge0Service'
@@ -103,8 +102,11 @@ import {
   setUserLevel,
   TEST_MODE,
   activateTestSubscription,
+  createBlogPost,
   createPayment,
+  deleteBlogPost,
   getActiveSubscription,
+  getBlogPosts,
   getUserProfile,
   trackUserActivity,
   saveUserProfile,
@@ -112,7 +114,11 @@ import {
   unlockSubtopicForTest,
   subscribeNewsletter,
   submitRating,
+  updateBlogPost,
   type SubscriptionPlan,
+  type BlogPost,
+  type BlogPostInput,
+  type BlogPostStatus,
   type UserSubscription,
 } from './services/nexagenService'
 import type { AppUser, ContentItem, Dashboard, SkillLevel, Subtopic } from './types/nexagen'
@@ -160,6 +166,74 @@ const visuals = [
 
 const interests = ['Music', 'Programming', 'Operating Systems', 'PowerShell', 'Computer Basics']
 const defaultPdfPath = '/javacript.pdf'
+const nexagenDisplayAdSlot = '5245298839'
+const nexagenFluidAdSlot = '7847411443'
+const nexagenFluidAdLayoutKey = '-6t+ed+2i-1n-4w'
+const blogAdminEmail = 'gregorystephen2006@gmail.com'
+const localBlogPostsKey = 'nexagen:blog-posts'
+
+const fallbackBlogPosts: BlogPost[] = [
+  {
+    id: 'fallback-choose-dashboard',
+    title: 'How to Choose Your First NexaGen Dashboard',
+    slug: 'how-to-choose-your-first-nexagen-dashboard',
+    category: 'Learning',
+    published_at: '2026-06-18T00:00:00.000Z',
+    read_time_minutes: 4,
+    image_url: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=1000&q=80',
+    excerpt: 'A practical path for choosing between piano, programming, and systems skills without overloading your study time.',
+    content: 'Choose the dashboard that solves your closest learning problem first, then use progress tracking to build momentum before adding a second skill area.',
+    status: 'published',
+    author_id: null,
+    created_at: '2026-06-18T00:00:00.000Z',
+    updated_at: '2026-06-18T00:00:00.000Z',
+  },
+  {
+    id: 'fallback-piano-keys',
+    title: 'Practice Piano in All 12 Keys Without Getting Lost',
+    slug: 'practice-piano-in-all-12-keys-without-getting-lost',
+    category: 'Music',
+    published_at: '2026-06-12T00:00:00.000Z',
+    read_time_minutes: 6,
+    image_url: 'https://images.unsplash.com/photo-1520523839897-bd0b52f945a0?auto=format&fit=crop&w=1000&q=80',
+    excerpt: 'Use tiny loops, ear training, and key maps to make all-key practice feel structured instead of mysterious.',
+    content: 'Start with one progression, move it through a few keys, and listen for the relationship between scale degree, chord shape, and melody.',
+    status: 'published',
+    author_id: null,
+    created_at: '2026-06-12T00:00:00.000Z',
+    updated_at: '2026-06-12T00:00:00.000Z',
+  },
+  {
+    id: 'fallback-programming-roadmap',
+    title: 'A Calm Beginner Roadmap for Programming',
+    slug: 'a-calm-beginner-roadmap-for-programming',
+    category: 'Programming',
+    published_at: '2026-06-07T00:00:00.000Z',
+    read_time_minutes: 5,
+    image_url: 'https://images.unsplash.com/photo-1515879218367-8466d910aaa4?auto=format&fit=crop&w=1000&q=80',
+    excerpt: 'Start with readable code, small exercises, and feedback loops before rushing into large projects.',
+    content: 'Readable code, short exercises, and honest testing beat rushed complexity. Build fluency first, then increase project size.',
+    status: 'published',
+    author_id: null,
+    created_at: '2026-06-07T00:00:00.000Z',
+    updated_at: '2026-06-07T00:00:00.000Z',
+  },
+  {
+    id: 'fallback-progress-tracking',
+    title: 'Why Progress Tracking Keeps Learners Honest',
+    slug: 'why-progress-tracking-keeps-learners-honest',
+    category: 'Product',
+    published_at: '2026-05-30T00:00:00.000Z',
+    read_time_minutes: 3,
+    image_url: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=1000&q=80',
+    excerpt: 'A good dashboard should show what you did, what you missed, and what deserves one more focused session.',
+    content: 'Progress tracking turns study into evidence. You can see what is done, what is weak, and where your next session should start.',
+    status: 'published',
+    author_id: null,
+    created_at: '2026-05-30T00:00:00.000Z',
+    updated_at: '2026-05-30T00:00:00.000Z',
+  },
+]
 
 function LanguageLogo({ language }: { language: ProgrammingLanguage }) {
   const [failed, setFailed] = useState(false)
@@ -693,7 +767,7 @@ function LandingShell(props: LandingShellProps) {
   const [comingSoonDashboard, setComingSoonDashboard] = useState<Dashboard | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [analyticsOpen, setAnalyticsOpen] = useState(false)
-  const [busTripOpen, setBusTripOpen] = useState(false)
+  const [blogOpen, setBlogOpen] = useState(false)
   const [focusedDashboardId, setFocusedDashboardId] = useState<string | null>(null)
   const [revisionCards, setRevisionCards] = useState<RevisionCard[]>([])
   const [progressMessage, setProgressMessage] = useState('')
@@ -705,7 +779,7 @@ function LandingShell(props: LandingShellProps) {
     const dashboard = dashboards.find((item) => item.id === id)
     if (!dashboard) return
     const accessKey = dashboardAccessKey(dashboard)
-    setBusTripOpen(false)
+    setBlogOpen(false)
     onSelected(id)
     if (!availableDashboardSlugs.includes(accessKey)) {
       setComingSoonDashboard(dashboard)
@@ -834,6 +908,7 @@ function LandingShell(props: LandingShellProps) {
             {[
               ['Search', '#search'],
               ['Dashboards', '#dashboards'],
+              ['Blog', '#blog'],
               ['Pricing', '#pricing'],
               ['Support', '#support'],
             ].map(([label, href]) => (
@@ -886,21 +961,21 @@ function LandingShell(props: LandingShellProps) {
         completed={completed}
         dashboards={dashboards}
         onAnalytics={() => {
-          setBusTripOpen(false)
+          setBlogOpen(false)
           setAnalyticsOpen(true)
           setSidebarOpen(false)
         }}
         onClose={() => setSidebarOpen(false)}
         onAccount={() => {
-          setBusTripOpen(false)
+          setBlogOpen(false)
           setAnalyticsOpen(false)
           setSidebarOpen(false)
           window.dispatchEvent(new CustomEvent('nexagen:open-account'))
         }}
-        onBusTrip={() => {
+        onBlog={() => {
           setAnalyticsOpen(false)
           setFocusedDashboardId(null)
-          setBusTripOpen(true)
+          setBlogOpen(true)
           setSidebarOpen(false)
           window.scrollTo({ top: 0, behavior: 'smooth' })
         }}
@@ -1050,7 +1125,7 @@ function LandingShell(props: LandingShellProps) {
       </AnimatePresence>
 
       <AnimatePresence>
-        {busTripOpen && <BusTripBookingPage onClose={() => setBusTripOpen(false)} />}
+        {blogOpen && <BlogDashboard appUser={appUser} onClose={() => setBlogOpen(false)} />}
       </AnimatePresence>
 
       <HowItWorks
@@ -1126,6 +1201,7 @@ function LandingShell(props: LandingShellProps) {
           <span>© {new Date().getFullYear()} NexaGen Technology Ltd. All rights reserved.</span>
           <span className="flex flex-wrap gap-3">
             <a href="#dashboards">Quick navigation</a>
+            <button className="font-semibold" onClick={() => setBlogOpen(true)}>Blog</button>
             <a href="#pricing">Pricing</a>
             <a href="#support">Support</a>
             <span>Terms & Privacy </span>
@@ -1196,26 +1272,212 @@ function LandingShell(props: LandingShellProps) {
   )
 }
 
-const busReferralCode = 'GRST416976'
-const busReferralUrl = 'https://buupass.com/referrals/GRST416976'
+const emptyBlogForm: BlogPostInput = {
+  title: '',
+  category: 'Learning',
+  excerpt: '',
+  content: '',
+  image_url: '',
+  read_time_minutes: 4,
+  status: 'published',
+  published_at: new Date().toISOString(),
+}
 
-function BusTripBookingPage({ onClose }: { onClose: () => void }) {
-  const [copied, setCopied] = useState(false)
-  const busTrustImages = ['/buupass1.jpeg', '/buupass2.jpeg']
-  const benefits = [
-    'Fast online booking',
-    'Secure payments',
-    'Easy route selection',
-    'Trusted bus operators',
-    'Convenient travel planning',
-    'Mobile-friendly booking experience',
-    'Quick ticket access',
-  ]
+const formatBlogDate = (value: string) =>
+  new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(value))
 
-  const copyReferralCode = async () => {
-    await navigator.clipboard.writeText(busReferralCode)
-    setCopied(true)
-    window.setTimeout(() => setCopied(false), 2600)
+const toDateTimeLocal = (value: string) => {
+  const date = new Date(value)
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset())
+  return date.toISOString().slice(0, 16)
+}
+
+const slugifyBlogTitle = (value: string) =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+
+const readLocalBlogPosts = () => {
+  try {
+    const rows = JSON.parse(localStorage.getItem(localBlogPostsKey) ?? '[]') as BlogPost[]
+    return rows.length ? rows : fallbackBlogPosts
+  } catch {
+    return fallbackBlogPosts
+  }
+}
+
+const saveLocalBlogPosts = (posts: BlogPost[]) => {
+  localStorage.setItem(localBlogPostsKey, JSON.stringify(posts))
+}
+
+const createLocalBlogPost = (input: BlogPostInput): BlogPost => {
+  const now = new Date().toISOString()
+  return {
+    id: `local-${crypto.randomUUID()}`,
+    title: input.title.trim(),
+    slug: slugifyBlogTitle(input.title),
+    category: input.category.trim(),
+    excerpt: input.excerpt.trim(),
+    content: input.content.trim(),
+    image_url: input.image_url?.trim() || null,
+    read_time_minutes: input.read_time_minutes,
+    status: input.status,
+    published_at: input.published_at,
+    author_id: input.author_id ?? null,
+    created_at: now,
+    updated_at: now,
+  }
+}
+
+function BlogDashboard({ appUser, onClose }: { appUser: AppUser; onClose: () => void }) {
+  const isBlogAdmin = appUser.user?.email?.toLowerCase() === blogAdminEmail
+  const [posts, setPosts] = useState<BlogPost[]>(readLocalBlogPosts)
+  const [selectedCategory, setSelectedCategory] = useState('All')
+  const [term, setTerm] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [message, setMessage] = useState('')
+  const [editingPost, setEditingPost] = useState<BlogPost | null>(null)
+  const [form, setForm] = useState<BlogPostInput>(emptyBlogForm)
+  const [blogDbReady, setBlogDbReady] = useState(false)
+  const [editorOpen, setEditorOpen] = useState(false)
+  const debouncedTerm = useDebouncedValue(term.trim().toLowerCase())
+
+  const loadPosts = async () => {
+    setLoading(true)
+    setMessage('')
+    try {
+      const rows = await getBlogPosts(isBlogAdmin)
+      setBlogDbReady(true)
+      const nextPosts = rows.length ? rows : readLocalBlogPosts()
+      setPosts(nextPosts)
+      if (!rows.length) saveLocalBlogPosts(nextPosts)
+    } catch {
+      setBlogDbReady(false)
+      const nextPosts = readLocalBlogPosts()
+      setPosts(nextPosts)
+      saveLocalBlogPosts(nextPosts)
+      setMessage('Featured stories are ready. New posts will appear here as they are published.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    void loadPosts()
+  }, [isBlogAdmin])
+
+  const categories = ['All', ...Array.from(new Set(posts.map((post) => post.category)))]
+  const visiblePosts = isBlogAdmin ? posts : posts.filter((post) => post.status === 'published' && new Date(post.published_at).getTime() <= Date.now())
+  const featuredPost = visiblePosts[0] ?? posts[0] ?? fallbackBlogPosts[0]
+  const filteredPosts = visiblePosts.filter((post) => {
+    const categoryMatches = selectedCategory === 'All' || post.category === selectedCategory
+    const queryMatches = !debouncedTerm || `${post.title} ${post.category} ${post.excerpt} ${post.content}`.toLowerCase().includes(debouncedTerm)
+    return categoryMatches && queryMatches
+  })
+
+  const editPost = (post: BlogPost) => {
+    setEditingPost(post)
+    setForm({
+      title: post.title,
+      category: post.category,
+      excerpt: post.excerpt,
+      content: post.content,
+      image_url: post.image_url ?? '',
+      read_time_minutes: post.read_time_minutes,
+      status: post.status,
+      published_at: post.published_at,
+      author_id: appUser.user?.id ?? null,
+    })
+    setEditorOpen(true)
+  }
+
+  const createPost = () => {
+    setEditingPost(null)
+    setForm({ ...emptyBlogForm, published_at: new Date().toISOString(), author_id: appUser.user?.id ?? null })
+    setEditorOpen(true)
+  }
+
+  const resetForm = () => {
+    setEditingPost(null)
+    setForm({ ...emptyBlogForm, published_at: new Date().toISOString(), author_id: appUser.user?.id ?? null })
+    setEditorOpen(false)
+  }
+
+  const savePost = async () => {
+    if (!isBlogAdmin) return
+    if (!form.title.trim() || !form.excerpt.trim() || !form.content.trim()) {
+      setMessage('Title, excerpt, and content are required.')
+      return
+    }
+
+    setMessage('Saving post...')
+    try {
+      const payload = { ...form, author_id: appUser.user?.id ?? null }
+      if (editingPost) {
+        if (!blogDbReady || editingPost.id.startsWith('fallback-') || editingPost.id.startsWith('local-')) {
+          const nextPosts = posts.map((post) => post.id === editingPost.id ? { ...post, ...payload, slug: slugifyBlogTitle(payload.title), image_url: payload.image_url?.trim() || null, updated_at: new Date().toISOString() } : post)
+          setPosts(nextPosts)
+          saveLocalBlogPosts(nextPosts)
+          setMessage('Post updated.')
+        } else {
+          await updateBlogPost(editingPost.id, payload)
+          setMessage('Post updated.')
+        }
+      } else {
+        if (!blogDbReady) {
+          const nextPosts = [createLocalBlogPost(payload), ...posts]
+          setPosts(nextPosts)
+          saveLocalBlogPosts(nextPosts)
+          setMessage('Post created.')
+        } else {
+          await createBlogPost(payload)
+          setMessage('Post created.')
+        }
+      }
+      resetForm()
+      if (blogDbReady && !editingPost?.id.startsWith('fallback-') && !editingPost?.id.startsWith('local-')) await loadPosts()
+    } catch (error) {
+      const payload = { ...form, author_id: appUser.user?.id ?? null }
+      if (editingPost) {
+        const nextPosts = posts.map((post) => post.id === editingPost.id ? { ...post, ...payload, slug: slugifyBlogTitle(payload.title), image_url: payload.image_url?.trim() || null, updated_at: new Date().toISOString() } : post)
+        setPosts(nextPosts)
+        saveLocalBlogPosts(nextPosts)
+        resetForm()
+        setMessage('Post updated.')
+        return
+      }
+      const nextPosts = [createLocalBlogPost(payload), ...posts]
+      setPosts(nextPosts)
+      saveLocalBlogPosts(nextPosts)
+      resetForm()
+      setMessage('Post created.')
+    }
+  }
+
+  const removePost = async (post: BlogPost) => {
+    if (!isBlogAdmin) return
+    setMessage('Deleting post...')
+    try {
+      if (!blogDbReady || post.id.startsWith('fallback-') || post.id.startsWith('local-')) {
+        const nextPosts = posts.filter((item) => item.id !== post.id)
+        setPosts(nextPosts)
+        saveLocalBlogPosts(nextPosts)
+      } else {
+        await deleteBlogPost(post.id)
+      }
+      setMessage('Post deleted.')
+      if (blogDbReady && !post.id.startsWith('fallback-') && !post.id.startsWith('local-')) await loadPosts()
+      if (editingPost?.id === post.id) resetForm()
+    } catch (error) {
+      const nextPosts = posts.filter((item) => item.id !== post.id)
+      setPosts(nextPosts)
+      saveLocalBlogPosts(nextPosts)
+      if (editingPost?.id === post.id) resetForm()
+      setMessage('Post deleted.')
+    }
   }
 
   return (
@@ -1223,101 +1485,284 @@ function BusTripBookingPage({ onClose }: { onClose: () => void }) {
       animate={{ opacity: 1 }}
       className="fixed inset-0 z-40 overflow-y-auto bg-[#f8fbff] px-4 py-5 sm:px-6 lg:px-8"
       exit={{ opacity: 0 }}
+      id="blog"
       initial={{ opacity: 0 }}
     >
-      <div className="mx-auto max-w-6xl">
+      <div className="mx-auto max-w-7xl">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <button className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-700 shadow-sm transition hover:bg-slate-50" onClick={onClose}>
             <ArrowLeft className="size-4" />
-            Back to dashboard
+            Back to NexaGen
           </button>
-          {copied && (
-            <span className="inline-flex items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50 px-4 py-2 text-sm font-black text-emerald-700 shadow-sm">
-              <CheckCircle2 className="size-4" />
-              Referral code copied successfully
-            </span>
-          )}
+          <span className="inline-flex items-center gap-2 rounded-full bg-sky-50 px-4 py-2 text-sm font-black text-sky-800">
+            <Newspaper className="size-4" />
+            {isBlogAdmin ? 'Blog Admin' : 'Blog Dashboard'}
+          </span>
         </div>
 
-        <div className="overflow-hidden rounded-[1.5rem] border border-white bg-white shadow-xl shadow-slate-200/70">
-          <div className="grid gap-0 lg:grid-cols-[1.05fr_.95fr]">
+        <section className="overflow-hidden rounded-[1.5rem] border border-slate-100 bg-white shadow-sm">
+          <div className="grid gap-0 lg:grid-cols-[1.08fr_.92fr]">
             <div className="p-6 sm:p-8 lg:p-10">
-              <div className="relative mb-7 overflow-hidden rounded-[1.25rem] border border-slate-100 shadow-lg shadow-slate-200/70">
-                <img alt="BUUPASS booking partner" className="h-52 w-full object-cover sm:h-64" src={busTrustImages[0]} />
-                <div className="absolute inset-0 bg-gradient-to-r from-slate-950/82 via-slate-950/42 to-transparent" />
-                <div className="absolute bottom-4 left-4 right-4 flex flex-wrap items-end justify-between gap-3">
-                  <div>
-                    <span className="inline-flex items-center gap-2 rounded-full bg-white/95 px-4 py-2 text-sm font-black text-pink-700 shadow-sm">
-                      <BusFront className="size-4" />
-                      BUUPASS travel partner
-                    </span>
-                    <p className="mt-3 max-w-sm text-sm font-bold leading-6 text-white/90">Trusted booking flow with secure ticket access and route planning from a known bus travel platform.</p>
-                  </div>
-                  <span className="rounded-full border border-white/30 bg-white/15 px-4 py-2 text-xs font-black uppercase tracking-[.16em] text-white backdrop-blur">Partner referral</span>
+              <p className="text-sm font-black uppercase tracking-[.16em] text-sky-700">NexaGen Blog</p>
+              <h1 className="mt-3 max-w-3xl text-4xl font-black leading-tight text-slate-950 md:text-6xl">Learning notes, product updates, and practical study guides.</h1>
+              <p className="mt-5 max-w-2xl text-base leading-7 text-slate-600 md:text-lg md:leading-8">
+                Fresh ideas for learners building confidence in music, programming, systems, and personal progress.
+              </p>
+              <div className="mt-7 grid gap-3 sm:grid-cols-[1fr_auto]">
+                <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 focus-within:border-sky-300">
+                  <Search className="size-5 text-slate-400" />
+                  <input className="min-w-0 flex-1 bg-transparent text-sm font-bold outline-none" onChange={(event) => setTerm(event.target.value)} placeholder="Search blog posts" value={term} />
+                </label>
+                <a className="premium-action px-5 py-3 text-sm" href="#blog-posts">
+                  Browse posts
+                </a>
+              </div>
+            </div>
+            <img alt="" className="h-72 w-full object-cover lg:h-full" decoding="async" src={featuredPost.image_url ?? fallbackBlogPosts[0].image_url ?? visuals[1]} />
+          </div>
+        </section>
+
+        {message && <p className="mt-5 rounded-2xl bg-sky-50 p-4 text-sm font-black text-sky-800">{message}</p>}
+
+        {isBlogAdmin && (
+          <section className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-[1.25rem] border border-slate-100 bg-white p-5 shadow-sm">
+            <div>
+              <p className="text-sm font-black uppercase tracking-[.16em] text-teal-700">Publisher studio</p>
+              <h2 className="mt-1 text-2xl font-black">Manage blog posts</h2>
+            </div>
+            <button className="premium-action px-5 py-3 text-sm" onClick={createPost}>Create post</button>
+          </section>
+        )}
+
+        <div className="my-6 rounded-[1.25rem] border border-slate-100 bg-white p-4 shadow-sm">
+          <AdSense adSlot={nexagenDisplayAdSlot} />
+        </div>
+
+        <section className="grid gap-6 py-6 lg:grid-cols-[1fr_320px]" id="blog-posts">
+          <div className="space-y-5">
+            <div className="flex flex-wrap gap-2">
+              {categories.map((category) => (
+                <button
+                  className={`rounded-full border px-4 py-2 text-sm font-black transition ${
+                    selectedCategory === category ? 'border-sky-300 bg-sky-600 text-white shadow-md shadow-sky-200' : 'border-slate-200 bg-white text-slate-700 hover:border-sky-200 hover:text-sky-700'
+                  }`}
+                  key={category}
+                  onClick={() => setSelectedCategory(category)}
+                >
+                  {category}
+                </button>
+              ))}
+            </div>
+
+            {loading && <p className="rounded-2xl bg-white p-5 text-sm font-black text-slate-500 shadow-sm">Loading blog posts...</p>}
+
+            <article className="grid overflow-hidden rounded-[1.25rem] border border-slate-100 bg-white shadow-sm md:grid-cols-[.9fr_1.1fr]">
+              <img alt="" className="h-64 w-full object-cover md:h-full" decoding="async" src={featuredPost.image_url ?? fallbackBlogPosts[0].image_url ?? visuals[1]} />
+              <div className="p-6">
+                <span className="rounded-full bg-teal-50 px-3 py-1 text-xs font-black uppercase tracking-[.12em] text-teal-700">Featured</span>
+                <h2 className="mt-4 text-2xl font-black text-slate-950">{featuredPost.title}</h2>
+                <p className="mt-3 leading-7 text-slate-600">{featuredPost.excerpt}</p>
+                <div className="mt-5 flex flex-wrap gap-2 text-xs font-bold text-slate-500">
+                  <span>{featuredPost.category}</span>
+                  <span>{formatBlogDate(featuredPost.published_at)}</span>
+                  <span>{featuredPost.read_time_minutes} min read</span>
+                  {isBlogAdmin && <span>{featuredPost.status}</span>}
                 </div>
               </div>
-              <h1 className="mt-5 text-4xl font-black leading-tight text-slate-950 sm:text-5xl">Book a Bus Trip With Us</h1>
-              <p className="mt-5 max-w-2xl text-base leading-8 text-slate-600 sm:text-lg">
-                Booking a bus has never been this easy.
-              </p>
-              <p className="mt-4 max-w-2xl text-base leading-8 text-slate-600">
-                We partnered with BUUPASS to bring you comfort, convenience, and faster travel planning directly from our platform.
-              </p>
-              <p className="mt-4 max-w-2xl text-base leading-8 text-slate-600">
-                Whether you're traveling home, heading back to campus, planning a weekend getaway, or commuting across cities - BUUPASS helps you book your trip quickly and securely.
-              </p>
+            </article>
 
-              <div className="mt-8">
-                <h2 className="text-xl font-black text-slate-950">Benefits</h2>
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  {benefits.map((benefit) => (
-                    <div className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-3 text-sm font-black text-slate-700" key={benefit}>
-                      <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-emerald-100 text-emerald-700">
-                        <CheckCircle2 className="size-4" />
-                      </span>
-                      {benefit}
+            <div className="rounded-[1.25rem] border border-slate-100 bg-white p-4 shadow-sm">
+              <AdSense adFormat="fluid" adLayoutKey={nexagenFluidAdLayoutKey} adSlot={nexagenFluidAdSlot} />
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              {filteredPosts.map((post) => (
+                <article className="overflow-hidden rounded-[1.25rem] border border-slate-100 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-md" key={post.id}>
+                  <img alt="" className="h-44 w-full object-cover" decoding="async" loading="lazy" src={post.image_url ?? fallbackBlogPosts[0].image_url ?? visuals[1]} />
+                  <div className="p-5">
+                    <div className="flex flex-wrap gap-2 text-xs font-bold text-slate-500">
+                      <span>{post.category}</span>
+                      <span>{formatBlogDate(post.published_at)}</span>
+                      <span>{post.read_time_minutes} min read</span>
+                      {isBlogAdmin && <span>{post.status}</span>}
                     </div>
-                  ))}
-                </div>
+                    <h3 className="mt-3 text-lg font-black text-slate-950">{post.title}</h3>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">{post.excerpt}</p>
+                    <p className="mt-3 line-clamp-4 text-sm leading-6 text-slate-500">{post.content}</p>
+                    {isBlogAdmin && (
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <button className="rounded-full bg-slate-950 px-4 py-2 text-xs font-black text-white" onClick={() => editPost(post)}>Edit</button>
+                        <button className="rounded-full border border-red-100 bg-red-50 px-4 py-2 text-xs font-black text-red-700" onClick={() => editPost(post)}>Delete</button>
+                      </div>
+                    )}
+                  </div>
+                </article>
+              ))}
+            </div>
+
+            {!filteredPosts.length && <EmptyState compact message="No blog post matches that search yet." />}
+          </div>
+
+          <aside className="space-y-5">
+            <div className="rounded-[1.25rem] border border-slate-100 bg-white p-5 shadow-sm">
+              <h2 className="text-lg font-black">Publishing</h2>
+              <div className="mt-4 grid gap-3 text-sm font-bold text-slate-600">
+                {[
+                  `${visiblePosts.length} visible posts`,
+                  `${posts.filter((post) => post.status === 'draft').length} drafts`,
+                  isBlogAdmin ? 'Admin editing enabled' : 'Public reading mode',
+                ].map((item) => (
+                  <div className="flex items-center gap-3 rounded-xl bg-slate-50 p-3" key={item}>
+                    <CheckCircle2 className="size-4 text-teal-600" />
+                    {item}
+                  </div>
+                ))}
               </div>
             </div>
 
-            <div className="relative overflow-hidden border-t border-slate-100 bg-slate-950 p-6 text-white sm:p-8 lg:border-l lg:border-t-0 lg:p-10">
-              <div className="absolute inset-0 opacity-25" style={{ backgroundImage: `url(${busTrustImages[1]})`, backgroundPosition: 'center', backgroundSize: 'cover' }} />
-              <div className="absolute inset-0 bg-gradient-to-b from-slate-950/80 via-slate-950/90 to-slate-950" />
-              <div className="relative rounded-[1.25rem] border border-white/10 bg-white/10 p-5 shadow-2xl backdrop-blur">
-                <p className="text-sm font-bold leading-6 text-pink-100">When booking, enter the referral code exactly as shown below:</p>
-                <div className="mt-5 rounded-2xl border border-pink-300/60 bg-white p-5 text-center shadow-lg shadow-pink-500/20">
-                  <p className="text-xs font-black uppercase tracking-[.2em] text-slate-500">Referral code</p>
-                  <p className="mt-2 break-all text-4xl font-black tracking-wider text-slate-950 sm:text-5xl">{busReferralCode}</p>
-                </div>
-                <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-                  <button className="inline-flex items-center justify-center gap-2 rounded-xl border border-pink-300 bg-pink-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-pink-500/40 transition-all duration-300 hover:bg-pink-400" onClick={() => void copyReferralCode()}>
-                    <Copy className="size-4" />
-                    Copy Referral Code
-                  </button>
-                  <button className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-black text-slate-950 shadow-lg transition hover:bg-pink-50" onClick={() => window.open(busReferralUrl, '_blank')}>
-                    <ExternalLink className="size-4" />
-                    Book Now
-                  </button>
-                </div>
+            <div className="rounded-[1.25rem] border border-slate-100 bg-white p-5 shadow-sm">
+              <h2 className="text-lg font-black">Sponsored</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-500">Helpful recommendations and learning-friendly offers may appear here.</p>
+              <div className="mt-4">
+                <AdSense adFormat="fluid" adLayoutKey={nexagenFluidAdLayoutKey} adSlot={nexagenFluidAdSlot} />
               </div>
+            </div>
 
-              <div className="relative mt-5 rounded-[1.25rem] border border-white/10 bg-white/5 p-5 backdrop-blur">
-                <div className="mb-4 grid grid-cols-2 gap-3">
-                  {busTrustImages.map((src, index) => (
-                    <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/10" key={src}>
-                      <img alt={`BUUPASS trust visual ${index + 1}`} className="h-24 w-full object-cover" src={src} />
-                    </div>
-                  ))}
-                </div>
-                <p className="text-sm font-bold leading-6 text-slate-200">
-                  Your booking opens securely on BUUPASS in a new tab, so your NexaGen dashboard stays exactly where you left it.
-                </p>
-              </div>
+            <div className="rounded-[1.25rem] border border-slate-100 bg-white p-5 shadow-sm">
+              <h2 className="text-lg font-black">Get Updates</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-500">Send readers from blog content into newsletter updates and dashboard launches.</p>
+              <NewsletterSignup />
+            </div>
+          </aside>
+        </section>
+      </div>
+
+      <AnimatePresence>
+        {editorOpen && isBlogAdmin && (
+          <BlogPostEditor
+            editingPost={editingPost}
+            form={form}
+            message={message}
+            onClose={resetForm}
+            onDelete={editingPost ? () => void removePost(editingPost) : undefined}
+            onFormChange={setForm}
+            onSave={() => void savePost()}
+          />
+        )}
+      </AnimatePresence>
+    </motion.section>
+  )
+}
+
+function BlogPostEditor({
+  editingPost,
+  form,
+  message,
+  onClose,
+  onDelete,
+  onFormChange,
+  onSave,
+}: {
+  editingPost: BlogPost | null
+  form: BlogPostInput
+  message: string
+  onClose: () => void
+  onDelete?: () => void
+  onFormChange: Dispatch<SetStateAction<BlogPostInput>>
+  onSave: () => void
+}) {
+  return (
+    <motion.section
+      animate={{ opacity: 1, y: 0 }}
+      className="fixed inset-0 z-[70] overflow-y-auto bg-[#f8fbff] px-4 py-5 sm:px-6 lg:px-8"
+      exit={{ opacity: 0, y: 18 }}
+      initial={{ opacity: 0, y: 18 }}
+      transition={{ duration: 0.2 }}
+    >
+      <div className="mx-auto max-w-6xl">
+        <div className="sticky top-0 z-10 -mx-4 mb-5 border-b border-slate-200 bg-[#f8fbff]/90 px-4 py-3 backdrop-blur-xl sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3">
+            <button className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-700 shadow-sm transition hover:bg-slate-50" onClick={onClose}>
+              <ArrowLeft className="size-4" />
+              Back to blog
+            </button>
+            <div className="flex flex-wrap gap-2">
+              {onDelete && (
+                <button className="rounded-xl border border-red-100 bg-red-50 px-4 py-2 text-sm font-black text-red-700 shadow-sm transition hover:bg-red-100" onClick={onDelete}>
+                  Delete post
+                </button>
+              )}
+              <button className="premium-action px-5 py-2.5 text-sm" onClick={onSave}>
+                {editingPost ? 'Update post' : 'Publish post'}
+              </button>
             </div>
           </div>
         </div>
+
+        <section className="grid gap-6 lg:grid-cols-[1fr_340px]">
+          <div className="rounded-[1.5rem] border border-slate-100 bg-white p-5 shadow-sm sm:p-6">
+            <p className="text-sm font-black uppercase tracking-[.16em] text-teal-700">Publisher studio</p>
+            <h1 className="mt-2 text-3xl font-black text-slate-950">{editingPost ? 'Edit post' : 'Create post'}</h1>
+            {message && <p className="mt-4 rounded-2xl bg-sky-50 p-4 text-sm font-black text-sky-800">{message}</p>}
+
+            <div className="mt-6 grid gap-3 lg:grid-cols-2">
+              <label className="grid gap-2 text-sm font-black text-slate-700">
+                Title
+                <input className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold outline-none focus:border-sky-300" onChange={(event) => onFormChange((current) => ({ ...current, title: event.target.value }))} value={form.title} />
+              </label>
+              <label className="grid gap-2 text-sm font-black text-slate-700">
+                Category
+                <input className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold outline-none focus:border-sky-300" onChange={(event) => onFormChange((current) => ({ ...current, category: event.target.value }))} value={form.category} />
+              </label>
+              <label className="grid gap-2 text-sm font-black text-slate-700 lg:col-span-2">
+                Image URL
+                <input className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold outline-none focus:border-sky-300" onChange={(event) => onFormChange((current) => ({ ...current, image_url: event.target.value }))} value={form.image_url ?? ''} />
+              </label>
+              <label className="grid gap-2 text-sm font-black text-slate-700">
+                Read time
+                <input className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold outline-none focus:border-sky-300" min={1} onChange={(event) => onFormChange((current) => ({ ...current, read_time_minutes: Number(event.target.value) || 1 }))} type="number" value={form.read_time_minutes} />
+              </label>
+              <label className="grid gap-2 text-sm font-black text-slate-700">
+                Status
+                <select className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold outline-none focus:border-sky-300" onChange={(event) => onFormChange((current) => ({ ...current, status: event.target.value as BlogPostStatus }))} value={form.status}>
+                  <option value="published">Published</option>
+                  <option value="draft">Draft</option>
+                </select>
+              </label>
+              <label className="grid gap-2 text-sm font-black text-slate-700 lg:col-span-2">
+                Posted date
+                <input className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold outline-none focus:border-sky-300" onChange={(event) => onFormChange((current) => ({ ...current, published_at: new Date(event.target.value).toISOString() }))} type="datetime-local" value={toDateTimeLocal(form.published_at)} />
+              </label>
+              <label className="grid gap-2 text-sm font-black text-slate-700 lg:col-span-2">
+                Short excerpt
+                <textarea className="min-h-28 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold outline-none focus:border-sky-300" onChange={(event) => onFormChange((current) => ({ ...current, excerpt: event.target.value }))} value={form.excerpt} />
+              </label>
+              <label className="grid gap-2 text-sm font-black text-slate-700 lg:col-span-2">
+                Full post
+                <textarea className="min-h-[42vh] rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold leading-7 outline-none focus:border-sky-300" onChange={(event) => onFormChange((current) => ({ ...current, content: event.target.value }))} value={form.content} />
+              </label>
+            </div>
+          </div>
+
+          <aside className="space-y-5">
+            <div className="rounded-[1.25rem] border border-slate-100 bg-white p-5 shadow-sm">
+              <h2 className="text-lg font-black">Preview</h2>
+              <img alt="" className="mt-4 h-40 w-full rounded-2xl object-cover" src={form.image_url || fallbackBlogPosts[0].image_url || visuals[1]} />
+              <p className="mt-4 text-xs font-black uppercase tracking-[.14em] text-sky-700">{form.category || 'Learning'}</p>
+              <h3 className="mt-2 text-xl font-black text-slate-950">{form.title || 'Untitled post'}</h3>
+              <p className="mt-2 text-sm leading-6 text-slate-600">{form.excerpt || 'A short introduction will appear here.'}</p>
+              <div className="mt-4 flex flex-wrap gap-2 text-xs font-bold text-slate-500">
+                <span>{formatBlogDate(form.published_at)}</span>
+                <span>{form.read_time_minutes} min read</span>
+                <span>{form.status}</span>
+              </div>
+            </div>
+
+            <div className="rounded-[1.25rem] border border-slate-100 bg-white p-4 shadow-sm">
+              <AdSense adFormat="fluid" adLayoutKey={nexagenFluidAdLayoutKey} adSlot={nexagenFluidAdSlot} />
+            </div>
+          </aside>
+        </section>
       </div>
     </motion.section>
   )
@@ -1424,7 +1869,7 @@ function ProfileSidebar({
   dashboards,
   onAnalytics,
   onAccount,
-  onBusTrip,
+  onBlog,
   onClose,
   onSelectDashboard,
   open,
@@ -1436,7 +1881,7 @@ function ProfileSidebar({
   dashboards: Dashboard[]
   onAnalytics: () => void
   onAccount: () => void
-  onBusTrip: () => void
+  onBlog: () => void
   onClose: () => void
   onSelectDashboard: (id: string) => void
   open: boolean
@@ -1497,14 +1942,14 @@ function ProfileSidebar({
             </button>
 
             <button
-              className="mt-3 flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-4 text-left font-black text-slate-800 shadow-sm transition hover:border-pink-200 hover:bg-pink-50 hover:text-pink-800"
-              onClick={onBusTrip}
+              className="mt-3 flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-4 text-left font-black text-slate-800 shadow-sm transition hover:border-sky-200 hover:bg-sky-50 hover:text-sky-800"
+              onClick={onBlog}
             >
               <span className="inline-flex items-center gap-2">
-                <span className="grid size-8 place-items-center rounded-xl bg-pink-100 text-pink-700">
-                  <BusFront className="size-4" />
+                <span className="grid size-8 place-items-center rounded-xl bg-sky-100 text-sky-700">
+                  <Newspaper className="size-4" />
                 </span>
-                Book a Bus Trip With Us
+                Blog Dashboard
               </span>
               <ChevronDown className="size-4 -rotate-90" />
             </button>
